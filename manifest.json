@@ -1,0 +1,33 @@
+
+{
+  "name": "BabySteps 育儿助手",
+  "short_name": "BabySteps",
+  "description": "智能宝宝成长记录助手，支持记录喂养、睡眠及 AI 分析",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#6366f1",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/3041/3041215.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/3041/3041215.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "添加喂养记录",
+      "url": "./index.html?action=feeding",
+      "icons": [{ "src": "https://cdn-icons-png.flaticon.com/512/3041/3041215.png", "sizes": "192x192" }]
+    }
+  ],
+  "categories": ["medical", "lifestyle"]
+}
