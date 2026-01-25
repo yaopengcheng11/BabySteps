@@ -26,3 +26,4 @@ export default defineConfig({
     host: true
   }
 });
+// fix vercel build
