@@ -3,7 +3,7 @@ import { BabyLog, BabyProfile, LogType } from "../types";
 
 /**
  * 根据所选时间范围生成 AI 育儿简报
- * 已切换为 DeepSeek API (deepseek-chat)
+ * 升级版：已切换至 DeepSeek V3，提供更有深度、月龄相关的专业洞察
  */
 export const getAIReport = async (
   profile: BabyProfile, 
@@ -11,22 +11,30 @@ export const getAIReport = async (
   reportType: 'day' | 'week' | 'month' | 'custom',
   rangeLabel: string
 ) => {
-  // 注意：在 Vite 项目中，必须使用 import.meta.env 且变量名需以 VITE_ 开头
+  // 1. 获取环境变量 (Vite 专用写法)
   const apiKey = import.meta.env.VITE_DEEPSEEK_API_KEY;
   
   if (!apiKey) {
-    console.error("缺少 API Key");
-    return "未检测到 VITE_DEEPSEEK_API_KEY，请在 .env 文件或 Vercel 环境变量中配置。";
+    return "配置错误：未检测到 VITE_DEEPSEEK_API_KEY，请检查环境变量设置。";
   }
 
-  // 初始化 OpenAI 客户端 (用于连接 DeepSeek)
+  // 2. 初始化 DeepSeek 客户端
   const client = new OpenAI({
     baseURL: 'https://api.deepseek.com',
     apiKey: apiKey,
-    dangerouslyAllowBrowser: true // 允许在浏览器端直接调用
+    dangerouslyAllowBrowser: true // 允许前端直接调用
   });
 
-  // 格式化记录汇总 (逻辑保持不变)
+  // 3. 计算宝宝月龄 (保留原逻辑，非常棒的细节)
+  const birth = new Date(profile.birthDate);
+  const now = new Date();
+  const diffTime = Math.abs(now.getTime() - birth.getTime());
+  const ageInDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  const ageInMonths = Math.floor(ageInDays / 30);
+  const ageRemainderDays = ageInDays % 30;
+  const ageContext = `${ageInMonths}个月${ageRemainderDays}天 (共${ageInDays}天)`;
+
+  // 4. 格式化记录汇总
   const logSummary = logs.map(log => {
     const date = new Date(log.timestamp).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' });
     const time = new Date(log.timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
@@ -34,21 +42,22 @@ export const getAIReport = async (
     
     switch (log.type) {
       case LogType.FEEDING: return `- [${dateTime}] 喂养: ${log.method} ${log.amount ? log.amount + 'ml' : log.duration + 'min'}`;
-      case LogType.SLEEP: return `- [${dateTime}] 睡眠: ${log.duration}min`;
-      case LogType.GROWTH: return `- [${date}] 成长: ${log.eventName} (${log.category})`;
+      case LogType.SLEEP: return `- [${dateTime}] 睡眠: 持续 ${log.duration}分钟`;
+      case LogType.GROWTH: return `- [${date}] 成长: ${log.eventName} (类别: ${log.category}) ${log.weight ? '体重:' + log.weight + 'kg' : ''}`;
       case LogType.DIAPER: return `- [${dateTime}] 排泄: ${log.status}`;
       default: return "";
     }
   }).filter(Boolean).join('\n');
 
   const typeName = {
-    day: '日报',
-    week: '周报',
-    month: '月报',
-    custom: '区间简报'
+    day: '每日成长看板',
+    week: '周度发育简报',
+    month: '月度成长总结',
+    custom: '阶段深度分析'
   }[reportType];
 
-   const prompt = `
+  // 5. 构建 Prompt (用户部分)
+  const userPrompt = `
 # 育儿咨询背景
 宝宝姓名：${profile.name}
 性别：${profile.gender === 'boy' ? '男宝宝' : '女宝宝'}
@@ -72,33 +81,27 @@ ${logSummary || "（该周期内暂无详细记录，请根据月龄提供一般
 4. **语气与排版**：语气专业、温暖、权威。总字数建议在 400 字左右，使用 Markdown 格式，多用加粗和分段。
 `;
 
+  // 6. 系统人设 (System Prompt)
+  const systemInstruction = "你是一位精通儿科学、儿童心理学和婴幼儿营养学的顶级专家。你的回答应该基于世界卫生组织（WHO）和最新的育儿科学研究。严禁提供迷信或未经证实的偏方。你的语气温暖、坚定且富有同理心。";
+
   try {
     const response = await client.chat.completions.create({
-      model: 'deepseek-chat',
+      model: 'deepseek-chat', // 使用 DeepSeek V3 模型
       messages: [
         { role: "system", content: systemInstruction },
-        { role: "user", content: prompt }
+        { role: "user", content: userPrompt }
       ],
-      temperature: 0.7,
-      max_tokens: 500, // 限制回复长度，防止废话
+      temperature: 1.0, // DeepSeek 建议稍微提高温度以获得更自然的语言
+      max_tokens: 1000,
     });
 
-    return response.choices[0]?.message?.content || "AI 暂时无法生成简报。";
+    return response.choices[0]?.message?.content || "专家正在思考中，请稍后...";
 
   } catch (error: any) {
-    console.error("DeepSeek API Error Detail:", error);
-    
-    // 错误处理优化
-    if (error.message?.includes('401')) {
-      return "API Key 无效或过期，请检查配置。";
-    }
-    if (error.message?.includes('402')) {
-      return "API 余额不足，请充值。";
-    }
-    if (error.message?.includes('Network Error') || error.message?.includes('fetch')) {
-      return "网络连接失败，请检查网络通畅。";
-    }
-    
-    return `获取简报失败：${error.message || "未知错误"}`;
+    console.error("DeepSeek API Error:", error);
+    // 简单的错误提示优化
+    if (error.message?.includes('401')) return "错误：API Key 无效，请检查配置。";
+    if (error.message?.includes('402')) return "错误：API 余额不足。";
+    return "连接专家服务器超时，请检查网络环境或稍后重试。";
   }
 };
