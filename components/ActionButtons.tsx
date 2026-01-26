@@ -49,8 +49,9 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({ onAddLog, birthDat
   const [todoText, setTodoText] = useState('');
   const [todoCategory, setTodoCategory] = useState<BabyTodo['category']>('daily');
   const [todoReminderEnabled, setTodoReminderEnabled] = useState(false);
+  // 默认提醒时间为当前时间+1小时
   const [todoReminderTime, setTodoReminderTime] = useState<string>(
-    new Date(Date.now() + 3600000).toISOString().slice(0, 16)
+    new Date(Date.now() + 3600000 - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)
   );
 
   const [growthEventName, setGrowthEventName] = useState('');
@@ -67,14 +68,6 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({ onAddLog, birthDat
     if (today.getDate() < birth.getDate()) months--;
     return Math.max(0, months);
   }, [birthDate]);
-
-  const ageLabel = useMemo(() => {
-    if (ageInMonths < 1) return "0-1月";
-    if (ageInMonths < 3) return "1-3月";
-    if (ageInMonths < 6) return "3-6月";
-    if (ageInMonths < 12) return "6-12月";
-    return "1岁+";
-  }, [ageInMonths]);
 
   useEffect(() => {
     if (!activeForm) return;
@@ -162,7 +155,7 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({ onAddLog, birthDat
     return (
       <div className="bg-white rounded-3xl p-4 border border-slate-100 mb-6 shadow-sm">
         <div className="flex justify-between items-center mb-4">
-          <span className="text-[13px] font-bold text-slate-800">{isQuickTodo ? '计划时间' : '记录时间'}</span>
+          <span className="text-[13px] font-bold text-slate-800">{isQuickTodo ? '归属日期' : '记录时间'}</span>
           <div className="flex items-center space-x-2">
             <span className="text-indigo-600 font-bold text-sm bg-indigo-50 px-3 py-1 rounded-full">{formattedDate}</span>
             <button onClick={() => setShowCustomTime(!showCustomTime)} className="text-[11px] text-slate-400 font-medium">{showCustomTime ? '返回滑动' : '自定义'}</button>
@@ -171,13 +164,13 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({ onAddLog, birthDat
         {!showCustomTime ? (
           <div className="space-y-4">
             <div className="flex gap-2 overflow-x-auto no-scrollbar">
-              {(isQuickTodo ? [0, 60, 120, 1440] : [0, 15, 30, 60, 120, 240]).map(offset => (
+              {(isQuickTodo ? [0, 1440] : [0, 15, 30, 60, 120, 240]).map(offset => (
                 <button key={offset} onClick={() => setTimeOffset(offset)} className={`flex-shrink-0 px-4 py-2 rounded-xl text-[11px] font-bold border transition-all ${timeOffset === offset ? 'bg-indigo-600 border-indigo-600 text-white shadow-md' : 'bg-slate-50 border-transparent text-slate-500'}`}>
-                  {offset === 0 ? '现在' : `${isQuickTodo ? (offset >= 1440 ? '明天' : offset/60 + 'h后') : (offset >= 60 ? offset/60 + 'h前' : offset + 'm前')}`}
+                  {offset === 0 ? '今天' : `${isQuickTodo ? '明天' : (offset >= 60 ? offset/60 + 'h前' : offset + 'm前')}`}
                 </button>
               ))}
             </div>
-            <input type="range" min="0" max={isQuickTodo ? "1440" : "480"} step="1" value={timeOffset} onChange={(e) => setTimeOffset(parseInt(e.target.value))} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-500" />
+            {!isQuickTodo && <input type="range" min="0" max="480" step="1" value={timeOffset} onChange={(e) => setTimeOffset(parseInt(e.target.value))} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-500" />}
           </div>
         ) : (
           <input type="datetime-local" value={new Date(selectedTime.getTime() - selectedTime.getTimezoneOffset() * 60000).toISOString().slice(0, 16)} onChange={(e) => setSelectedTime(new Date(e.target.value))} className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-4 py-4 text-sm font-bold text-indigo-700 outline-none" />
@@ -222,13 +215,19 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({ onAddLog, birthDat
 
       {activeForm && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end md:items-center justify-center overflow-hidden">
-          <div className="bg-white rounded-t-[2.5rem] md:rounded-[2rem] w-full max-w-md p-6 shadow-2xl animate-slide-up flex flex-col max-h-[90vh]">
+          <div className="bg-white rounded-t-[2.5rem] md:rounded-[2rem] w-full max-w-md p-6 shadow-2xl animate-fade-in flex flex-col max-h-[90vh]">
             <div className="flex justify-between items-center mb-6">
-              <h3 className="text-lg font-black text-slate-800">记录 {activeForm === 'QUICK_TODO' ? '待办' : activeForm}</h3>
+              <h3 className="text-lg font-black text-slate-800">记录 {
+                activeForm === 'QUICK_TODO' ? '待办事项' : 
+                activeForm === LogType.DIAPER ? '尿布' :
+                activeForm === LogType.VACCINE ? '疫苗' :
+                activeForm === LogType.GROWTH ? '成长' : activeForm
+              }</h3>
               <button onClick={resetForms} className="w-10 h-10 flex items-center justify-center bg-slate-50 rounded-full text-slate-300"><i className="fas fa-times"></i></button>
             </div>
-            <div className="flex-grow overflow-y-auto no-scrollbar space-y-5 pb-6">
+            <div className="flex-grow overflow-y-auto no-scrollbar space-y-5 pb-6 px-1">
               <CompactTimePicker />
+              
               {activeForm === LogType.FEEDING && (
                 <>
                   <div className="grid grid-cols-4 gap-2">
@@ -242,21 +241,188 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({ onAddLog, birthDat
                   </div>
                 </>
               )}
-              {activeForm === LogType.NOTE && (
-                <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="记录宝宝的小趣事或重要提醒..." rows={4} className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-4 text-sm font-medium outline-none focus:ring-2 focus:ring-amber-200 transition-all resize-none" />
-              )}
-              {activeForm === 'QUICK_TODO' && (
+
+              {activeForm === LogType.DIAPER && (
                 <div className="space-y-4">
-                  <input type="text" value={todoText} onChange={(e) => setTodoText(e.target.value)} placeholder="宝宝需要做的事..." className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-4 text-sm font-bold outline-none" />
-                  <div className="grid grid-cols-2 gap-3">
-                    {['daily', 'medical', 'shopping', 'other'].map(c => (
-                      <button key={c} onClick={() => setTodoCategory(c as any)} className={`px-4 py-3 rounded-xl border text-xs font-bold ${todoCategory === c ? 'bg-indigo-500 text-white' : 'bg-slate-50 text-slate-500'}`}>{c === 'daily' ? '日常' : c === 'medical' ? '医疗' : c === 'shopping' ? '购物' : '其他'}</button>
+                  <div className="grid grid-cols-3 gap-2">
+                    {Object.values(DiaperStatus).map(s => (
+                      <button 
+                        key={s} 
+                        onClick={() => setDiaperStatus(s)} 
+                        className={`py-4 rounded-2xl border text-[11px] font-bold transition-all ${diaperStatus === s ? 'bg-teal-400 border-teal-400 text-white shadow-md' : 'bg-white border-slate-100 text-slate-500'}`}
+                      >
+                        {s}
+                      </button>
                     ))}
+                  </div>
+                  <p className="text-[10px] text-slate-400 text-center italic font-medium px-4">提示：如果宝宝排泄异常（如腹泻、颜色异常），请在备注中记录细节，以便 AI 分析。</p>
+                </div>
+              )}
+
+              {activeForm === LogType.VACCINE && (
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-black text-slate-500 ml-2 uppercase tracking-wider">疫苗名称</label>
+                    <input 
+                      type="text" 
+                      value={vaccineName} 
+                      onChange={(e) => setVaccineName(e.target.value)} 
+                      placeholder="例如：乙肝疫苗、卡介苗..." 
+                      className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-4 text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-100 transition-all"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-black text-slate-500 ml-2 uppercase tracking-wider">下次接种预约 (可选)</label>
+                    <input 
+                      type="date" 
+                      value={nextDoseDate} 
+                      onChange={(e) => setNextDoseDate(e.target.value)} 
+                      className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-4 text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-100 transition-all"
+                    />
                   </div>
                 </div>
               )}
-              {/* 其他表单略...保持原有逻辑 */}
-              {(activeForm !== LogType.NOTE && activeForm !== 'QUICK_TODO') && <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="添加备注..." rows={2} className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-4 text-sm outline-none" />}
+
+              {activeForm === LogType.GROWTH && (
+                <div className="space-y-5">
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-black text-slate-500 ml-2 uppercase tracking-wider">发生了什么？</label>
+                    <input 
+                      type="text" 
+                      value={growthEventName} 
+                      onChange={(e) => setGrowthEventName(e.target.value)} 
+                      placeholder="例如：第一次翻身、长了第一颗牙..." 
+                      className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-4 text-sm font-bold outline-none focus:ring-2 focus:ring-rose-100 transition-all"
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-black text-slate-500 ml-2 uppercase tracking-wider">记录类型</label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {Object.values(GrowthCategory).map(cat => (
+                        <button 
+                          key={cat} 
+                          onClick={() => setGrowthCategory(cat)} 
+                          className={`py-3 rounded-xl border text-[10px] font-bold transition-all ${growthCategory === cat ? 'bg-rose-400 border-rose-400 text-white' : 'bg-white border-slate-100 text-slate-400'}`}
+                        >
+                          {cat}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <label className="text-[11px] font-black text-slate-500 ml-2 uppercase tracking-wider">体重 (kg)</label>
+                      <input 
+                        type="number" 
+                        step="0.01"
+                        value={growthWeight} 
+                        onChange={(e) => setGrowthWeight(e.target.value)} 
+                        placeholder="0.00" 
+                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-4 text-sm font-bold outline-none"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[11px] font-black text-slate-500 ml-2 uppercase tracking-wider">身高 (cm)</label>
+                      <input 
+                        type="number" 
+                        step="0.1"
+                        value={growthHeight} 
+                        onChange={(e) => setGrowthHeight(e.target.value)} 
+                        placeholder="0.0" 
+                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-4 text-sm font-bold outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {activeForm === LogType.NOTE && (
+                <textarea 
+                  value={note} 
+                  onChange={(e) => setNote(e.target.value)} 
+                  placeholder="记录宝宝的小趣事..." 
+                  rows={4} 
+                  className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-4 text-sm font-medium outline-none focus:ring-2 focus:ring-amber-200 transition-all resize-none" 
+                />
+              )}
+
+              {activeForm === 'QUICK_TODO' && (
+                <div className="space-y-5">
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-black text-slate-500 ml-2 uppercase tracking-wider">任务内容</label>
+                    <input 
+                      type="text" 
+                      value={todoText} 
+                      onChange={(e) => setTodoText(e.target.value)} 
+                      placeholder="宝宝需要做的事..." 
+                      className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-100 transition-all" 
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-black text-slate-500 ml-2 uppercase tracking-wider">任务分类</label>
+                    <div className="grid grid-cols-4 gap-2">
+                      {[
+                        { key: 'daily', label: '日常', icon: 'fa-sun' },
+                        { key: 'medical', label: '医疗', icon: 'fa-stethoscope' },
+                        { key: 'shopping', label: '购物', icon: 'fa-cart-shopping' },
+                        { key: 'other', label: '其他', icon: 'fa-ellipsis' }
+                      ].map(c => (
+                        <button key={c.key} onClick={() => setTodoCategory(c.key as any)} className={`py-3 rounded-xl border text-[10px] font-bold flex flex-col items-center justify-center space-y-1 transition-all ${todoCategory === c.key ? 'bg-indigo-500 border-indigo-500 text-white shadow-md' : 'bg-white border-slate-100 text-slate-400'}`}>
+                          <i className={`fas ${c.icon}`}></i>
+                          <span>{c.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-50/50 border border-slate-100 p-4 rounded-3xl space-y-4">
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center space-x-2">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center ${todoReminderEnabled ? 'bg-indigo-100 text-indigo-500' : 'bg-slate-200 text-slate-400'}`}>
+                          <i className="fas fa-bell text-[10px]"></i>
+                        </div>
+                        <span className="text-xs font-bold text-slate-700">开启定时提醒</span>
+                      </div>
+                      <button 
+                        onClick={() => setTodoReminderEnabled(!todoReminderEnabled)}
+                        className={`w-12 h-6 rounded-full relative transition-colors duration-300 ${todoReminderEnabled ? 'bg-indigo-500' : 'bg-slate-300'}`}
+                      >
+                        <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all duration-300 ${todoReminderEnabled ? 'left-7' : 'left-1'}`}></div>
+                      </button>
+                    </div>
+
+                    {todoReminderEnabled && (
+                      <div className="animate-fade-in pt-1">
+                        <input 
+                          type="datetime-local" 
+                          value={todoReminderTime} 
+                          onChange={(e) => setTodoReminderTime(e.target.value)}
+                          className="w-full bg-white border border-slate-100 rounded-2xl px-4 py-3 text-xs font-bold text-indigo-600 outline-none shadow-inner" 
+                        />
+                        <p className="mt-2 text-[9px] text-slate-400 italic font-medium px-1">
+                          * 提醒功能需在浏览器授权通知权限。
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+              
+              {(activeForm !== LogType.NOTE && activeForm !== 'QUICK_TODO' && activeForm !== LogType.GROWTH) && (
+                <div className="space-y-2">
+                  <label className="text-[11px] font-black text-slate-500 ml-2 uppercase tracking-wider">备注</label>
+                  <textarea 
+                    value={note} 
+                    onChange={(e) => setNote(e.target.value)} 
+                    placeholder="添加更多细节..." 
+                    rows={2} 
+                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-4 text-sm outline-none resize-none" 
+                  />
+                </div>
+              )}
             </div>
             <button onClick={handleSave} className={`w-full py-5 rounded-[2rem] text-white font-black shadow-xl active:scale-95 transition-all ${getThemeColor()}`}>
               确认保存
