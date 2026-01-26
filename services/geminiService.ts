@@ -94,3 +94,4 @@ ${logSummary || "该时间段内暂无记录"}
     return `获取简报失败：${error.message || "未知错误"}`;
   }
 };
+//1.0
