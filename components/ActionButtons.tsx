@@ -1,10 +1,12 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { LogType, FeedingMethod, DiaperStatus, BabyLog, GrowthCategory } from '../types';
+import { LogType, FeedingMethod, DiaperStatus, BabyLog, GrowthCategory, BabyTodo } from '../types';
 
 interface ActionButtonsProps {
   onAddLog: (log: BabyLog) => void;
   birthDate: string;
+  onAddTodo: (text: string, category: BabyTodo['category'], targetDate: number) => void;
+  currentAnchorDate: Date;
 }
 
 const ReferenceTip = React.memo(({ icon, label, children }: React.PropsWithChildren<{ icon: string, label: string }>) => {
@@ -28,8 +30,8 @@ const ReferenceTip = React.memo(({ icon, label, children }: React.PropsWithChild
   );
 });
 
-export const ActionButtons: React.FC<ActionButtonsProps> = ({ onAddLog, birthDate }) => {
-  const [activeForm, setActiveForm] = useState<LogType | null>(null);
+export const ActionButtons: React.FC<ActionButtonsProps> = ({ onAddLog, birthDate, onAddTodo, currentAnchorDate }) => {
+  const [activeForm, setActiveForm] = useState<LogType | 'QUICK_TODO' | null>(null);
 
   // Form states
   const [selectedTime, setSelectedTime] = useState<Date>(new Date());
@@ -44,6 +46,10 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({ onAddLog, birthDat
   const [vaccineName, setVaccineName] = useState('');
   const [nextDoseDate, setNextDoseDate] = useState('');
   const [note, setNote] = useState('');
+
+  // Todo specific states
+  const [todoText, setTodoText] = useState('');
+  const [todoCategory, setTodoCategory] = useState<BabyTodo['category']>('daily');
 
   // Growth specific states
   const [growthEventName, setGrowthEventName] = useState('');
@@ -69,12 +75,17 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({ onAddLog, birthDat
     return "1岁+";
   }, [ageInMonths]);
 
+  // 当打开表单时，如果当前时光轴不在“今天”，则默认选中时光轴对应的日期
   useEffect(() => {
-    if (activeForm && !showCustomTime) {
-      const now = new Date();
-      setSelectedTime(new Date(now.getTime() - timeOffset * 60000));
+    if (activeForm && activeForm !== 'QUICK_TODO') {
+      const isToday = currentAnchorDate.toDateString() === new Date().toDateString();
+      if (!isToday && !showCustomTime) {
+         setSelectedTime(new Date(currentAnchorDate));
+      } else if (isToday && !showCustomTime) {
+         setSelectedTime(new Date(Date.now() - timeOffset * 60000));
+      }
     }
-  }, [timeOffset, activeForm, showCustomTime]);
+  }, [timeOffset, activeForm, showCustomTime, currentAnchorDate]);
 
   const resetForms = () => {
     setActiveForm(null);
@@ -87,16 +98,26 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({ onAddLog, birthDat
     setGrowthWeight('');
     setGrowthHeight('');
     setGrowthCategory(GrowthCategory.MILESTONE);
+    setTodoText('');
+    setTodoCategory('daily');
   };
 
-  const handleAddLog = (type: LogType) => {
+  const handleSave = () => {
+    if (activeForm === 'QUICK_TODO') {
+      if (!todoText.trim()) return;
+      // 待办事项使用当前选中的时间作为目标日期
+      onAddTodo(todoText.trim(), todoCategory, selectedTime.getTime());
+      resetForms();
+      return;
+    }
+
     const baseData = {
       id: Date.now().toString(),
       timestamp: selectedTime.getTime(),
       note: note.trim() || undefined,
     };
 
-    switch (type) {
+    switch (activeForm) {
       case LogType.FEEDING:
         onAddLog({ ...baseData, type: LogType.FEEDING, method: feedingMethod, amount: feedingMethod === FeedingMethod.BREAST ? undefined : feedingAmount, duration: feedingMethod === FeedingMethod.BREAST ? feedingDuration : undefined } as any);
         break;
@@ -130,9 +151,11 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({ onAddLog, birthDat
   const CompactTimePicker = () => (
     <div className="bg-slate-50 rounded-2xl p-3 border border-slate-100 mb-4">
       <div className="flex justify-between items-center mb-2">
-        <span className="text-[11px] font-bold text-slate-500">发生时间</span>
+        <span className="text-[11px] font-bold text-slate-500">日期/时间</span>
         <div className="flex items-center space-x-2">
-          <span className="text-indigo-600 font-bold text-sm">{selectedTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+          <span className="text-indigo-600 font-bold text-sm">
+            {selectedTime.toLocaleDateString('zh-CN', {month: 'numeric', day: 'numeric'})} {selectedTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </span>
           <button onClick={() => setShowCustomTime(!showCustomTime)} className="text-[10px] text-slate-400 underline">{showCustomTime ? '返回滑动' : '自定义'}</button>
         </div>
       </div>
@@ -160,7 +183,7 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({ onAddLog, birthDat
     </ul>
   ), [ageInMonths]);
 
-  const ActionBtn = ({ type, icon, label, color }: { type: LogType, icon: string, label: string, color: string }) => (
+  const ActionBtn = ({ type, icon, label, color }: { type: LogType | 'QUICK_TODO', icon: string, label: string, color: string }) => (
     <button onClick={() => setActiveForm(type)} className="flex flex-col items-center group">
       <div className={`w-14 h-14 rounded-2xl ${color} flex items-center justify-center text-white mb-1.5 shadow-lg transform active:scale-90 transition-all`}>
         <i className={`fas ${icon} text-xl`}></i>
@@ -176,18 +199,20 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({ onAddLog, birthDat
       case LogType.DIAPER: return 'bg-teal-400';
       case LogType.VACCINE: return 'bg-emerald-500';
       case LogType.GROWTH: return 'bg-rose-400';
+      case 'QUICK_TODO': return 'bg-indigo-600';
       default: return 'bg-slate-400';
     }
   };
 
   return (
     <div className="relative">
-      <div className="grid grid-cols-5 gap-2 px-1">
+      <div className="flex justify-between px-1 overflow-x-auto no-scrollbar space-x-2">
         <ActionBtn type={LogType.FEEDING} icon="fa-bottle-water" label="喂养" color="bg-orange-400" />
         <ActionBtn type={LogType.SLEEP} icon="fa-moon" label="睡眠" color="bg-indigo-400" />
         <ActionBtn type={LogType.DIAPER} icon="fa-poop" label="尿布" color="bg-teal-400" />
         <ActionBtn type={LogType.VACCINE} icon="fa-syringe" label="疫苗" color="bg-emerald-500" />
         <ActionBtn type={LogType.GROWTH} icon="fa-star" label="成长" color="bg-rose-400" />
+        <ActionBtn type="QUICK_TODO" icon="fa-check-double" label="加待办" color="bg-indigo-600" />
       </div>
 
       {activeForm && (
@@ -196,14 +221,13 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({ onAddLog, birthDat
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-bold text-slate-800 flex items-center">
                 <span className={`w-2 h-6 rounded-full mr-2 ${getThemeColor()}`}></span>
-                记录{activeForm === LogType.FEEDING ? '喂养' : activeForm === LogType.SLEEP ? '睡眠' : activeForm === LogType.DIAPER ? '尿布' : activeForm === LogType.VACCINE ? '疫苗' : '成长瞬间'}
+                {activeForm === 'QUICK_TODO' ? '快捷待办' : `记录${activeForm === LogType.FEEDING ? '喂养' : activeForm === LogType.SLEEP ? '睡眠' : activeForm === LogType.DIAPER ? '尿布' : activeForm === LogType.VACCINE ? '疫苗' : '成长瞬间'}`}
               </h3>
               <button onClick={resetForms} className="w-8 h-8 flex items-center justify-center bg-slate-100 rounded-full text-slate-400"><i className="fas fa-times"></i></button>
             </div>
 
             <div className="flex-grow overflow-y-auto no-scrollbar space-y-4 pb-2">
               <CompactTimePicker />
-
               {activeForm === LogType.FEEDING && (
                 <>
                   <ReferenceTip icon="fa-lightbulb" label={`${ageLabel}喂养`}>{feedingTips}</ReferenceTip>
@@ -218,7 +242,6 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({ onAddLog, birthDat
                   </div>
                 </>
               )}
-
               {activeForm === LogType.SLEEP && (
                 <>
                   <ReferenceTip icon="fa-bed" label={`${ageLabel}睡眠`}>每日推荐睡眠 {ageInMonths < 6 ? '14-16' : '12-14'} 小时，注意仰卧安全。</ReferenceTip>
@@ -228,7 +251,6 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({ onAddLog, birthDat
                   </div>
                 </>
               )}
-
               {activeForm === LogType.DIAPER && (
                 <div className="grid grid-cols-3 gap-2">
                   {Object.values(DiaperStatus).map(s => (
@@ -236,7 +258,6 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({ onAddLog, birthDat
                   ))}
                 </div>
               )}
-
               {activeForm === LogType.GROWTH && (
                 <div className="space-y-4">
                   <div className="grid grid-cols-3 gap-2">
@@ -251,47 +272,66 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({ onAddLog, birthDat
                       </button>
                     ))}
                   </div>
-                  
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-400 ml-1">事件名称</label>
-                    <input type="text" value={growthEventName} onChange={(e) => setGrowthEventName(e.target.value)} placeholder="如：第一次翻身、长第一颗牙..." className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs outline-none focus:ring-1 focus:ring-rose-300 transition-all" />
-                    <div className="flex gap-1 overflow-x-auto no-scrollbar py-1">
-                      {['第一次笑', '抬头稳了', '会坐了', '会爬了', '叫爸爸', '叫妈妈', '身高体重测量'].map(tag => (
-                        <button key={tag} onClick={() => setGrowthEventName(tag)} className="flex-shrink-0 px-3 py-1 bg-slate-100 text-[10px] text-slate-500 rounded-full border border-slate-200">+{tag}</button>
+                  <input type="text" value={growthEventName} onChange={(e) => setGrowthEventName(e.target.value)} placeholder="如：第一次翻身、长第一颗牙..." className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs outline-none" />
+                  <div className="grid grid-cols-2 gap-3">
+                    <input type="number" step="0.1" value={growthWeight} onChange={(e) => setGrowthWeight(e.target.value)} placeholder="体重 (kg)" className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs outline-none" />
+                    <input type="number" step="0.1" value={growthHeight} onChange={(e) => setGrowthHeight(e.target.value)} placeholder="身高 (cm)" className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs outline-none" />
+                  </div>
+                </div>
+              )}
+              {activeForm === LogType.VACCINE && (
+                <div className="space-y-4">
+                  <input type="text" value={vaccineName} onChange={(e) => setVaccineName(e.target.value)} placeholder="疫苗名称（如：五联疫苗）" className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs outline-none" />
+                  <input type="date" value={nextDoseDate} onChange={(e) => setNextDoseDate(e.target.value)} className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs outline-none" />
+                </div>
+              )}
+              {activeForm === 'QUICK_TODO' ? (
+                <div className="space-y-6 pt-2">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-400 ml-1">任务内容</label>
+                    <input 
+                      type="text" 
+                      autoFocus
+                      value={todoText} 
+                      onChange={(e) => setTodoText(e.target.value)} 
+                      placeholder="想记下什么？" 
+                      className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-4 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-300 transition-all"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-400 ml-1">分类</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        {key: 'daily', label: '日常琐事', icon: 'fa-sun'},
+                        {key: 'medical', label: '医疗健康', icon: 'fa-stethoscope'},
+                        {key: 'shopping', label: '购物清单', icon: 'fa-cart-shopping'},
+                        {key: 'other', label: '其他', icon: 'fa-ellipsis'},
+                      ].map(cat => (
+                        <button 
+                          key={cat.key} 
+                          onClick={() => setTodoCategory(cat.key as any)}
+                          className={`flex items-center space-x-3 px-4 py-3 rounded-2xl border transition-all ${
+                            todoCategory === cat.key ? 'bg-indigo-500 border-indigo-500 text-white shadow-md' : 'bg-white border-slate-100 text-slate-500'
+                          }`}
+                        >
+                          <i className={`fas ${cat.icon} text-xs`}></i>
+                          <span className="text-xs font-bold">{cat.label}</span>
+                        </button>
                       ))}
                     </div>
                   </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-slate-400 ml-1">体重 (kg)</label>
-                      <input type="number" step="0.1" value={growthWeight} onChange={(e) => setGrowthWeight(e.target.value)} placeholder="可选" className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs outline-none focus:ring-1 focus:ring-rose-300" />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-slate-400 ml-1">身高 (cm)</label>
-                      <input type="number" step="0.1" value={growthHeight} onChange={(e) => setGrowthHeight(e.target.value)} placeholder="可选" className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs outline-none focus:ring-1 focus:ring-rose-300" />
-                    </div>
-                  </div>
                 </div>
+              ) : (
+                <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="添加备注..." rows={1} className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs outline-none focus:ring-1 focus:ring-indigo-300 resize-none min-h-[46px]" />
               )}
-
-              {activeForm === LogType.VACCINE && (
-                <div className="space-y-4">
-                  <input type="text" value={vaccineName} onChange={(e) => setVaccineName(e.target.value)} placeholder="疫苗名称（如：五联疫苗）" className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs outline-none focus:ring-1 focus:ring-emerald-300" />
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-400 ml-1">预约下次</label>
-                    <input type="date" value={nextDoseDate} onChange={(e) => setNextDoseDate(e.target.value)} className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-xs outline-none" />
-                  </div>
-                </div>
-              )}
-
-              <div className="relative">
-                <i className="fas fa-pen-nib absolute left-3 top-3 text-slate-300 text-xs"></i>
-                <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="添加备注或记录此刻心情..." rows={1} className="w-full bg-slate-50 border border-slate-100 rounded-xl pl-9 pr-4 py-3 text-xs outline-none focus:ring-1 focus:ring-indigo-300 resize-none min-h-[46px]" />
-              </div>
             </div>
 
-            <button onClick={() => handleAddLog(activeForm)} className={`w-full py-4 rounded-2xl text-white font-bold shadow-lg transition-all active:scale-95 mt-2 ${getThemeColor()}`}>保存记录</button>
+            <button 
+              onClick={handleSave} 
+              className={`w-full py-4 rounded-2xl text-white font-bold shadow-lg transition-all active:scale-95 mt-4 ${getThemeColor()}`}
+            >
+              {activeForm === 'QUICK_TODO' ? '添加到该日期' : '保存记录'}
+            </button>
           </div>
         </div>
       )}

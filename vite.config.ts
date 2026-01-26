@@ -14,6 +14,7 @@ export default defineConfig({
         manualChunks: {
           'vendor-react': ['react', 'react-dom'],
           'vendor-charts': ['recharts'],
+          'vendor-ai': ['@google/genai']
         }
       }
     }
@@ -26,4 +27,3 @@ export default defineConfig({
     host: true
   }
 });
-// fix vercel build

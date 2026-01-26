@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { BabyLog, LogType, FeedingMethod, GrowthCategory } from '../types';
 
 interface LogCardProps {
@@ -8,6 +8,8 @@ interface LogCardProps {
 }
 
 export const LogCard: React.FC<LogCardProps> = ({ log, onDelete }) => {
+  const [isAdviceExpanded, setIsAdviceExpanded] = useState(false);
+
   const getIcon = () => {
     switch (log.type) {
       case LogType.FEEDING: return { i: 'fa-bottle-water', c: 'bg-orange-100 text-orange-600', b: 'border-orange-100' };
@@ -21,6 +23,7 @@ export const LogCard: React.FC<LogCardProps> = ({ log, onDelete }) => {
           c: isMilestone ? 'bg-rose-100 text-rose-600 animate-pulse' : 'bg-rose-50 text-rose-500',
           b: 'border-rose-100'
         };
+      case LogType.ADVICE: return { i: 'fa-robot', c: 'bg-indigo-600 text-white shadow-indigo-100', b: 'border-indigo-200' };
       default: return { i: 'fa-info-circle', c: 'bg-slate-100 text-slate-600', b: 'border-slate-100' };
     }
   };
@@ -32,7 +35,7 @@ export const LogCard: React.FC<LogCardProps> = ({ log, onDelete }) => {
   return (
     <div className={`bg-white rounded-2xl p-4 flex flex-col space-y-3 border ${b} shadow-sm hover:shadow-md transition-all group relative animate-fade-in`}>
       <div className="flex items-start space-x-4">
-        <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${c}`}>
+        <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm ${c}`}>
           <i className={`fas ${i} text-lg`}></i>
         </div>
         <div className="flex-grow">
@@ -40,9 +43,10 @@ export const LogCard: React.FC<LogCardProps> = ({ log, onDelete }) => {
             <div className="flex flex-col">
               <h4 className="font-bold text-slate-800 leading-snug">
                 {log.type === LogType.FEEDING && `喂养: ${log.method}`}
-                {log.type === LogType.SLEEP && '睡眠时间'}
+                {log.type === LogType.SLEEP && '睡眠记录'}
                 {log.type === LogType.DIAPER && `换尿布: ${log.status}`}
                 {log.type === LogType.VACCINE && `疫苗接种`}
+                {log.type === LogType.ADVICE && log.title}
                 {log.type === LogType.GROWTH && (
                   <span className="flex items-center">
                     {log.eventName}
@@ -75,6 +79,20 @@ export const LogCard: React.FC<LogCardProps> = ({ log, onDelete }) => {
               )}
               {log.type === LogType.SLEEP && `${Math.floor(log.duration / 60)}h ${log.duration % 60}m`}
               {log.type === LogType.DIAPER && `状态：${log.status}`}
+              {log.type === LogType.ADVICE && (
+                <div className="space-y-2">
+                  <div className={`bg-indigo-50/50 rounded-xl p-3 text-[11px] leading-relaxed text-indigo-700/80 border border-indigo-100/50 italic ${!isAdviceExpanded ? 'line-clamp-3' : ''}`}>
+                    {log.content}
+                  </div>
+                  <button 
+                    onClick={() => setIsAdviceExpanded(!isAdviceExpanded)}
+                    className="text-[10px] text-indigo-500 font-bold flex items-center space-x-1"
+                  >
+                    <span>{isAdviceExpanded ? '收起详情' : '阅读全文'}</span>
+                    <i className={`fas fa-chevron-${isAdviceExpanded ? 'up' : 'down'} text-[8px]`}></i>
+                  </button>
+                </div>
+              )}
               {log.type === LogType.VACCINE && (
                 <div className="space-y-1">
                   <div className="text-emerald-600 font-bold">{log.vaccineName}</div>

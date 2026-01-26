@@ -1,3 +1,4 @@
+
 {
   "name": "babysteps-pwa",
   "private": true,
@@ -9,7 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "openai": "^6.16.0",
+    "@google/genai": "^1.38.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "recharts": "^2.15.0"

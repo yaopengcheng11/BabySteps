@@ -5,7 +5,9 @@ export enum LogType {
   DIAPER = 'DIAPER',
   GROWTH = 'GROWTH',
   NOTE = 'NOTE',
-  VACCINE = 'VACCINE'
+  VACCINE = 'VACCINE',
+  ADVICE = 'ADVICE',
+  TODO = 'TODO'
 }
 
 export enum FeedingMethod {
@@ -21,13 +23,12 @@ export enum DiaperStatus {
   BOTH = '都有'
 }
 
-// 新增：成长事件分类
 export enum GrowthCategory {
-  MILESTONE = '里程碑', // 第一次坐、走等
-  PHYSICAL = '身体发育', // 身高、体重
-  TEETH = '牙齿',     // 长牙
-  HEALTH = '健康状态', // 精神、过敏等
-  SKILL = '新技能'    // 抓握、发声等
+  MILESTONE = '里程碑',
+  PHYSICAL = '身体发育',
+  TEETH = '牙齿',
+  HEALTH = '健康状态',
+  SKILL = '新技能'
 }
 
 export interface BabyLogBase {
@@ -55,7 +56,6 @@ export interface DiaperLog extends BabyLogBase {
   status: DiaperStatus;
 }
 
-// 扩展：成长记录现在支持事件名称、分类以及可选的身体指标
 export interface GrowthLog extends BabyLogBase {
   type: LogType.GROWTH;
   eventName: string; 
@@ -75,7 +75,23 @@ export interface NoteLog extends BabyLogBase {
   content: string;
 }
 
-export type BabyLog = FeedingLog | SleepLog | DiaperLog | GrowthLog | NoteLog | VaccineLog;
+export interface AdviceLog extends BabyLogBase {
+  type: LogType.ADVICE;
+  content: string;
+  title: string;
+  reportType?: 'day' | 'week' | 'month' | 'custom';
+}
+
+export interface BabyTodo {
+  id: string;
+  text: string;
+  completed: boolean;
+  createdAt: number;
+  targetDate: number; // 关联的日期时间戳（通常设为当天0点）
+  category?: 'shopping' | 'medical' | 'daily' | 'other';
+}
+
+export type BabyLog = FeedingLog | SleepLog | DiaperLog | GrowthLog | NoteLog | VaccineLog | AdviceLog;
 
 export interface BabyProfile {
   name: string;
