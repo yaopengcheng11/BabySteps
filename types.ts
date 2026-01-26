@@ -87,7 +87,9 @@ export interface BabyTodo {
   text: string;
   completed: boolean;
   createdAt: number;
-  targetDate: number; // 关联的日期时间戳（通常设为当天0点）
+  targetDate: number; 
+  reminderTime?: number; // 新增：提醒的具体时间戳
+  isNotified?: boolean;  // 新增：是否已触发过通知
   category?: 'shopping' | 'medical' | 'daily' | 'other';
 }
 

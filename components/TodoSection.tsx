@@ -33,7 +33,6 @@ export const TodoSection: React.FC<TodoSectionProps> = ({ todos, onAddTodo, onTo
 
   return (
     <div className="space-y-6 animate-fade-in pb-20">
-      {/* 进度概览卡片 */}
       <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-slate-100 relative overflow-hidden">
         <div className="flex justify-between items-center mb-4">
           <div>
@@ -62,7 +61,6 @@ export const TodoSection: React.FC<TodoSectionProps> = ({ todos, onAddTodo, onTo
         </div>
       </div>
 
-      {/* 新增待办输入 */}
       <form onSubmit={handleSubmit} className="bg-white rounded-3xl p-4 shadow-sm border border-slate-100 space-y-4">
         <div className="flex space-x-2">
           <input 
@@ -96,7 +94,6 @@ export const TodoSection: React.FC<TodoSectionProps> = ({ todos, onAddTodo, onTo
         </div>
       </form>
 
-      {/* 待办列表 */}
       <div className="space-y-3">
         {todos.length === 0 ? (
           <div className="py-20 text-center flex flex-col items-center justify-center space-y-3 opacity-30">
@@ -108,6 +105,8 @@ export const TodoSection: React.FC<TodoSectionProps> = ({ todos, onAddTodo, onTo
         ) : (
           todos.sort((a, b) => (a.completed === b.completed ? b.createdAt - a.createdAt : a.completed ? 1 : -1)).map(todo => {
             const cat = categories.find(c => c.key === todo.category) || categories[3];
+            const reminderDate = todo.reminderTime ? new Date(todo.reminderTime) : null;
+            
             return (
               <div 
                 key={todo.id} 
@@ -132,6 +131,12 @@ export const TodoSection: React.FC<TodoSectionProps> = ({ todos, onAddTodo, onTo
                       <span className={`text-[8px] px-1.5 py-0.5 rounded-md font-bold uppercase ${cat.color}`}>
                         {cat.label}
                       </span>
+                      {reminderDate && (
+                        <span className={`text-[8px] font-bold flex items-center ${todo.completed ? 'text-slate-300' : 'text-indigo-500'}`}>
+                          <i className="fas fa-bell mr-1 text-[7px]"></i>
+                          提醒：{reminderDate.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>

@@ -1,12 +1,13 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { BabyProfile, BabyLog } from '../types';
+import { BabyProfile, BabyLog, BabyTodo } from '../types';
 
 interface HeaderProps {
   profile: BabyProfile;
   onEditProfile: () => void;
   logs: BabyLog[];
-  onImportData: (logs: BabyLog[], profile: BabyProfile) => void;
+  todos: BabyTodo[];
+  onImportData: (logs: BabyLog[], profile: BabyProfile, todos: BabyTodo[]) => void;
   isInstallable: boolean;
   onInstall: () => void;
 }
@@ -16,12 +17,14 @@ const STORAGE_KEY_LAST_EXPORT = 'babysteps_last_export_v1';
 interface PendingImport {
   logs: BabyLog[];
   profile: BabyProfile;
+  todos: BabyTodo[];
   importTime: string;
-  currentTime: string | null;
-  isOlder: boolean;
+  logCount: number;
+  todoCount: number;
+  babyName: string;
 }
 
-export const Header: React.FC<HeaderProps> = ({ profile, onEditProfile, logs, onImportData, isInstallable, onInstall }) => {
+export const Header: React.FC<HeaderProps> = ({ profile, onEditProfile, logs, todos, onImportData, isInstallable, onInstall }) => {
   const [showSettings, setShowSettings] = useState(false);
   const [lastExport, setLastExport] = useState<string | null>(null);
   const [pendingImport, setPendingImport] = useState<PendingImport | null>(null);
@@ -47,10 +50,11 @@ export const Header: React.FC<HeaderProps> = ({ profile, onEditProfile, logs, on
   const handleExport = () => {
     const now = new Date();
     const data = {
-      version: '1.0',
+      version: '1.2',
       exportDate: now.toISOString(),
       profile,
-      logs
+      logs,
+      todos // 确保待办事項被同步
     };
     
     const timestamp = now.toLocaleDateString('zh-CN', {
@@ -61,11 +65,10 @@ export const Header: React.FC<HeaderProps> = ({ profile, onEditProfile, logs, on
     now.toLocaleTimeString('zh-CN', {
       hour12: false,
       hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit'
+      minute: '2-digit'
     }).replace(/:/g, '');
 
-    const fileName = `BabySteps_${profile.name}_${timestamp}.json`;
+    const fileName = `BabySteps_Backup_${profile.name}_${timestamp}.json`;
     
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -92,27 +95,22 @@ export const Header: React.FC<HeaderProps> = ({ profile, onEditProfile, logs, on
     reader.onload = (event) => {
       try {
         const json = JSON.parse(event.target?.result as string);
-        if (json.logs && json.profile) {
-          const importLastLogTs = json.logs.length > 0 
-            ? Math.max(...json.logs.map((l: any) => l.timestamp))
-            : new Date(json.exportDate || 0).getTime();
-
-          const currentLastLogTs = logs.length > 0 
-            ? Math.max(...logs.map((l: any) => l.timestamp))
-            : null;
-
+        // 核心检查：必须包含资料和记录列表
+        if (json.profile && json.logs) {
           setPendingImport({
             logs: json.logs,
             profile: json.profile,
-            importTime: new Date(importLastLogTs).toLocaleString('zh-CN'),
-            currentTime: currentLastLogTs ? new Date(currentLastLogTs).toLocaleString('zh-CN') : null,
-            isOlder: currentLastLogTs !== null && importLastLogTs < currentLastLogTs
+            todos: json.todos || [], // 兼容旧版不带待办的备份
+            importTime: new Date(json.exportDate || Date.now()).toLocaleString('zh-CN'),
+            logCount: json.logs.length,
+            todoCount: (json.todos || []).length,
+            babyName: json.profile.name
           });
         } else {
-          alert('无效的备份文件格式。');
+          alert('无效的备份文件：缺少核心数据。');
         }
       } catch (error) {
-        alert('解析文件失败。');
+        alert('解析备份文件失败，请确保文件格式正确。');
       }
     };
     reader.readAsText(file);
@@ -121,10 +119,10 @@ export const Header: React.FC<HeaderProps> = ({ profile, onEditProfile, logs, on
 
   const confirmImport = () => {
     if (pendingImport) {
-      onImportData(pendingImport.logs, pendingImport.profile);
+      onImportData(pendingImport.logs, pendingImport.profile, pendingImport.todos);
       setPendingImport(null);
       setShowSettings(false);
-      setTimeout(() => alert('数据恢复成功！'), 100);
+      setTimeout(() => alert('全量数据恢复成功！'), 100);
     }
   };
 
@@ -161,27 +159,8 @@ export const Header: React.FC<HeaderProps> = ({ profile, onEditProfile, logs, on
             </div>
 
             <div className="space-y-4">
-              {/* 一键安装按钮 */}
-              {isInstallable && (
-                <button 
-                  onClick={() => { onInstall(); setShowSettings(false); }}
-                  className="w-full flex items-center p-4 bg-indigo-600 text-white rounded-2xl hover:bg-indigo-700 transition-all shadow-md active:scale-[0.98] animate-pulse"
-                >
-                  <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center mr-4">
-                    <i className="fas fa-cloud-arrow-down"></i>
-                  </div>
-                  <div className="text-left">
-                    <p className="text-sm font-bold">安装应用到桌面</p>
-                    <p className="text-[10px] opacity-80">一键完成，无需通过浏览器访问</p>
-                  </div>
-                </button>
-              )}
-
               <button 
-                onClick={() => {
-                  onEditProfile();
-                  setShowSettings(false);
-                }}
+                onClick={() => { onEditProfile(); setShowSettings(false); }}
                 className="w-full flex items-center p-4 bg-slate-50 rounded-2xl hover:bg-indigo-50 transition-colors group"
               >
                 <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-indigo-500 mr-4 shadow-sm group-hover:bg-indigo-500 group-hover:text-white transition-all">
@@ -195,7 +174,7 @@ export const Header: React.FC<HeaderProps> = ({ profile, onEditProfile, logs, on
 
               <div className="border-t border-slate-100 my-2 pt-4">
                 <div className="flex justify-between items-center mb-3 ml-1">
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">数据安全</p>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">全量同步 (资料/记录/待办)</p>
                 </div>
                 
                 <div className="grid grid-cols-2 gap-3">
@@ -204,7 +183,7 @@ export const Header: React.FC<HeaderProps> = ({ profile, onEditProfile, logs, on
                     className="flex flex-col items-center p-4 bg-indigo-50/50 rounded-2xl hover:bg-indigo-100 transition-colors text-indigo-600 border border-indigo-100/50"
                   >
                     <i className="fas fa-file-export text-xl mb-2"></i>
-                    <span className="text-[11px] font-bold">导出 JSON</span>
+                    <span className="text-[11px] font-bold">导出备份</span>
                   </button>
                   <button 
                     onClick={() => fileInputRef.current?.click()}
@@ -214,6 +193,9 @@ export const Header: React.FC<HeaderProps> = ({ profile, onEditProfile, logs, on
                     <span className="text-[11px] font-bold">导入恢复</span>
                   </button>
                 </div>
+                {lastExport && (
+                  <p className="mt-3 text-[9px] text-slate-300 text-center font-medium italic">最近备份: {lastExport}</p>
+                )}
               </div>
 
               <input 
@@ -228,18 +210,38 @@ export const Header: React.FC<HeaderProps> = ({ profile, onEditProfile, logs, on
         </div>
       )}
 
-      {/* 导入确认弹窗略... (保持原逻辑不变) */}
       {pendingImport && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[100] flex items-center justify-center p-6 animate-fade-in">
-          <div className="bg-white rounded-[2.5rem] w-full max-w-sm p-8 shadow-2xl overflow-hidden relative text-center flex flex-col items-center">
-            <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 ${pendingImport.isOlder ? 'bg-amber-100 text-amber-500' : 'bg-indigo-100 text-indigo-500'}`}>
-                <i className={`fas ${pendingImport.isOlder ? 'fa-exclamation-triangle' : 'fa-file-import'} text-2xl`}></i>
+          <div className="bg-white rounded-[2.5rem] w-full max-w-sm p-8 shadow-2xl relative text-center flex flex-col items-center">
+            <div className="w-16 h-16 rounded-full bg-indigo-100 text-indigo-500 flex items-center justify-center mb-4">
+                <i className="fas fa-file-import text-2xl"></i>
             </div>
-            <h3 className="text-lg font-bold mb-2">确认恢复数据？</h3>
-            <p className="text-xs text-slate-500 mb-6">此操作将覆盖当前手机内的所有记录。</p>
+            <h3 className="text-lg font-bold mb-2">确认恢复备份？</h3>
+            <div className="bg-slate-50 rounded-2xl p-4 w-full mb-6 text-left space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] text-slate-400 font-bold">宝宝姓名</span>
+                <span className="text-xs font-black text-slate-700">{pendingImport.babyName}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] text-slate-400 font-bold">备份日期</span>
+                <span className="text-[10px] font-black text-indigo-500">{pendingImport.importTime}</span>
+              </div>
+              <div className="h-px bg-slate-200/50 my-1"></div>
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] text-slate-400 font-bold">包含记录</span>
+                <span className="text-xs font-black text-slate-700">{pendingImport.logCount} 条</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] text-slate-400 font-bold">包含待办</span>
+                <span className="text-xs font-black text-slate-700">{pendingImport.todoCount} 项</span>
+              </div>
+            </div>
+            <p className="text-[10px] text-rose-400 mb-6 font-bold leading-relaxed px-4">
+              ⚠️ 注意：恢复后将完全覆盖当前设备上的所有数据！
+            </p>
             <div className="grid grid-cols-2 gap-3 w-full">
-              <button onClick={() => setPendingImport(null)} className="py-4 rounded-2xl bg-slate-100 text-slate-500 font-bold text-xs">取消</button>
-              <button onClick={confirmImport} className="py-4 rounded-2xl bg-indigo-500 text-white font-bold text-xs">确认</button>
+              <button onClick={() => setPendingImport(null)} className="py-4 rounded-2xl bg-slate-100 text-slate-500 font-bold text-xs active:scale-95 transition-all">取消</button>
+              <button onClick={confirmImport} className="py-4 rounded-2xl bg-indigo-500 text-white font-bold text-xs active:scale-95 transition-all shadow-lg shadow-indigo-100">确认恢复</button>
             </div>
           </div>
         </div>
