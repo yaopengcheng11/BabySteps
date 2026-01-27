@@ -1,9 +1,10 @@
-import OpenAI from "openai";
+
+import { GoogleGenAI } from "@google/genai";
 import { BabyLog, BabyProfile, LogType } from "../types";
 
 /**
  * 根据所选时间范围生成 AI 育儿简报
- * 升级版：已切换至 DeepSeek V3，提供更有深度、月龄相关的专业洞察
+ * 升级版：提供更有深度、月龄相关的专业洞察
  */
 export const getAIReport = async (
   profile: BabyProfile, 
@@ -11,21 +12,9 @@ export const getAIReport = async (
   reportType: 'day' | 'week' | 'month' | 'custom',
   rangeLabel: string
 ) => {
-  // 1. 获取环境变量 (Vite 专用写法)
-  const apiKey = import.meta.env.VITE_DEEPSEEK_API_KEY;
-  
-  if (!apiKey) {
-    return "配置错误：未检测到 VITE_DEEPSEEK_API_KEY，请检查环境变量设置。";
-  }
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-  // 2. 初始化 DeepSeek 客户端
-  const client = new OpenAI({
-    baseURL: 'https://api.deepseek.com',
-    apiKey: apiKey,
-    dangerouslyAllowBrowser: true // 允许前端直接调用
-  });
-
-  // 3. 计算宝宝月龄 (保留原逻辑，非常棒的细节)
+  // 计算宝宝月龄，为 AI 提供发育阶段背景
   const birth = new Date(profile.birthDate);
   const now = new Date();
   const diffTime = Math.abs(now.getTime() - birth.getTime());
@@ -34,7 +23,7 @@ export const getAIReport = async (
   const ageRemainderDays = ageInDays % 30;
   const ageContext = `${ageInMonths}个月${ageRemainderDays}天 (共${ageInDays}天)`;
 
-  // 4. 格式化记录汇总
+  // 格式化记录汇总（增加数据密度）
   const logSummary = logs.map(log => {
     const date = new Date(log.timestamp).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' });
     const time = new Date(log.timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
@@ -56,8 +45,7 @@ export const getAIReport = async (
     custom: '阶段深度分析'
   }[reportType];
 
-  // 5. 构建 Prompt (用户部分)
-  const userPrompt = `
+  const prompt = `
 # 育儿咨询背景
 宝宝姓名：${profile.name}
 性别：${profile.gender === 'boy' ? '男宝宝' : '女宝宝'}
@@ -81,28 +69,20 @@ ${logSummary || "（该周期内暂无详细记录，请根据月龄提供一般
 4. **语气与排版**：语气专业、温暖、权威。总字数建议在 400 字左右，使用 Markdown 格式，多用加粗和分段。
 `;
 
-  // 6. 系统人设 (System Prompt)
-  const systemInstruction = "你是一位精通儿科学、儿童心理学和婴幼儿营养学的顶级专家。你的回答应该基于世界卫生组织（WHO）和最新的育儿科学研究。严禁提供迷信或未经证实的偏方。你的语气温暖、坚定且富有同理心。";
-
   try {
-    const response = await client.chat.completions.create({
-      model: 'deepseek-chat', // 使用 DeepSeek V3 模型
-      messages: [
-        { role: "system", content: systemInstruction },
-        { role: "user", content: userPrompt }
-      ],
-      temperature: 1.0, // DeepSeek 建议稍微提高温度以获得更自然的语言
-      max_tokens: 1000,
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-pro-preview', // 升级为 Pro 模型以获取更深度的逻辑推理
+      contents: prompt,
+      config: {
+        systemInstruction: "你是一位精通儿科学、儿童心理学和婴幼儿营养学的顶级专家。你的回答应该基于世界卫生组织（WHO）和最新的育儿科学研究。严禁提供迷信或未经证实的偏方。",
+        temperature: 0.75,
+        topP: 0.9,
+      },
     });
 
-    return response.choices[0]?.message?.content || "专家正在思考中，请稍后...";
-
+    return response.text || "AI 专家正在查阅文献，请稍后再试。";
   } catch (error: any) {
-    console.error("DeepSeek API Error:", error);
-    // 简单的错误提示优化
-    if (error.message?.includes('401')) return "错误：API Key 无效，请检查配置。";
-    if (error.message?.includes('402')) return "错误：API 余额不足。";
-    return "连接专家服务器超时，请检查网络环境或稍后重试。";
+    console.error("Gemini API Error:", error);
+    return "由于连接专家服务器超时，请检查您的网络环境并重新尝试生成。";
   }
 };
-//3.14

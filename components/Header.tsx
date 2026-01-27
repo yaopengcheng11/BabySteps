@@ -1,13 +1,12 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { BabyProfile, BabyLog, BabyTodo } from '../types';
+import { BabyProfile, BabyLog } from '../types';
 
 interface HeaderProps {
   profile: BabyProfile;
   onEditProfile: () => void;
   logs: BabyLog[];
-  todos: BabyTodo[];
-  onImportData: (logs: BabyLog[], profile: BabyProfile, todos: BabyTodo[]) => void;
+  onImportData: (logs: BabyLog[], profile: BabyProfile) => void;
   isInstallable: boolean;
   onInstall: () => void;
 }
@@ -17,14 +16,12 @@ const STORAGE_KEY_LAST_EXPORT = 'babysteps_last_export_v1';
 interface PendingImport {
   logs: BabyLog[];
   profile: BabyProfile;
-  todos: BabyTodo[];
   importTime: string;
   logCount: number;
-  todoCount: number;
   babyName: string;
 }
 
-export const Header: React.FC<HeaderProps> = ({ profile, onEditProfile, logs, todos, onImportData, isInstallable, onInstall }) => {
+export const Header: React.FC<HeaderProps> = ({ profile, onEditProfile, logs, onImportData, isInstallable, onInstall }) => {
   const [showSettings, setShowSettings] = useState(false);
   const [lastExport, setLastExport] = useState<string | null>(null);
   const [pendingImport, setPendingImport] = useState<PendingImport | null>(null);
@@ -47,16 +44,19 @@ export const Header: React.FC<HeaderProps> = ({ profile, onEditProfile, logs, to
     return `${months} 个月 ${days} 天`;
   };
 
-  const handleExport = () => {
+  const generateBackupData = () => {
     const now = new Date();
-    const data = {
-      version: '1.2',
+    return {
+      version: '1.4',
       exportDate: now.toISOString(),
       profile,
-      logs,
-      todos // 确保待办事項被同步
+      logs
     };
-    
+  };
+
+  const handleExport = () => {
+    const now = new Date();
+    const data = generateBackupData();
     const timestamp = now.toLocaleDateString('zh-CN', {
       year: 'numeric',
       month: '2-digit',
@@ -69,7 +69,6 @@ export const Header: React.FC<HeaderProps> = ({ profile, onEditProfile, logs, to
     }).replace(/:/g, '');
 
     const fileName = `BabySteps_Backup_${profile.name}_${timestamp}.json`;
-    
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -83,7 +82,6 @@ export const Header: React.FC<HeaderProps> = ({ profile, onEditProfile, logs, to
     const exportTimeString = now.toLocaleString('zh-CN');
     setLastExport(exportTimeString);
     localStorage.setItem(STORAGE_KEY_LAST_EXPORT, exportTimeString);
-    
     setShowSettings(false);
   };
 
@@ -95,15 +93,12 @@ export const Header: React.FC<HeaderProps> = ({ profile, onEditProfile, logs, to
     reader.onload = (event) => {
       try {
         const json = JSON.parse(event.target?.result as string);
-        // 核心检查：必须包含资料和记录列表
         if (json.profile && json.logs) {
           setPendingImport({
             logs: json.logs,
             profile: json.profile,
-            todos: json.todos || [], // 兼容旧版不带待办的备份
             importTime: new Date(json.exportDate || Date.now()).toLocaleString('zh-CN'),
             logCount: json.logs.length,
-            todoCount: (json.todos || []).length,
             babyName: json.profile.name
           });
         } else {
@@ -119,7 +114,7 @@ export const Header: React.FC<HeaderProps> = ({ profile, onEditProfile, logs, to
 
   const confirmImport = () => {
     if (pendingImport) {
-      onImportData(pendingImport.logs, pendingImport.profile, pendingImport.todos);
+      onImportData(pendingImport.logs, pendingImport.profile);
       setPendingImport(null);
       setShowSettings(false);
       setTimeout(() => alert('全量数据恢复成功！'), 100);
@@ -139,26 +134,28 @@ export const Header: React.FC<HeaderProps> = ({ profile, onEditProfile, logs, to
               <p className="text-[10px] text-slate-500 font-medium">已出生 {getAge(profile.birthDate)}</p>
             </div>
           </div>
-          <button 
-            onClick={() => setShowSettings(true)}
-            className="w-10 h-10 flex items-center justify-center bg-slate-50 rounded-full text-slate-400 hover:text-indigo-500 transition-all active:scale-90"
-          >
-            <i className="fas fa-cog"></i>
-          </button>
+          <div className="flex items-center space-x-2">
+            <button 
+              onClick={() => setShowSettings(true)}
+              className="w-10 h-10 flex items-center justify-center bg-slate-50 rounded-full text-slate-400 hover:text-indigo-500 transition-all active:scale-90"
+            >
+              <i className="fas fa-cog"></i>
+            </button>
+          </div>
         </div>
       </header>
 
       {showSettings && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-6 animate-fade-in">
-          <div className="bg-white rounded-[2rem] w-full max-w-sm p-8 shadow-2xl animate-slide-up">
+          <div className="bg-white rounded-[2.5rem] w-full max-w-sm p-8 shadow-2xl animate-slide-up flex flex-col max-h-[85vh]">
             <div className="flex justify-between items-center mb-6">
-              <h3 className="text-lg font-bold text-slate-800">系统设置</h3>
-              <button onClick={() => setShowSettings(false)} className="w-8 h-8 flex items-center justify-center bg-slate-100 rounded-full text-slate-400">
+              <h3 className="text-lg font-bold text-slate-800">系统与备份</h3>
+              <button onClick={() => { setShowSettings(false); }} className="w-8 h-8 flex items-center justify-center bg-slate-100 rounded-full text-slate-400">
                 <i className="fas fa-times"></i>
               </button>
             </div>
 
-            <div className="space-y-4">
+            <div className="flex-grow overflow-y-auto no-scrollbar space-y-4 pr-1">
               <button 
                 onClick={() => { onEditProfile(); setShowSettings(false); }}
                 className="w-full flex items-center p-4 bg-slate-50 rounded-2xl hover:bg-indigo-50 transition-colors group"
@@ -172,40 +169,55 @@ export const Header: React.FC<HeaderProps> = ({ profile, onEditProfile, logs, to
                 </div>
               </button>
 
-              <div className="border-t border-slate-100 my-2 pt-4">
-                <div className="flex justify-between items-center mb-3 ml-1">
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">全量同步 (资料/记录/待办)</p>
+              <div className="bg-indigo-50/40 rounded-3xl p-5 border border-indigo-100/50">
+                <div className="flex items-center space-x-2 mb-3">
+                  <div className="w-6 h-6 bg-indigo-500 text-white rounded-lg flex items-center justify-center">
+                    <i className="fas fa-cloud-arrow-up text-[10px]"></i>
+                  </div>
+                  <h4 className="text-[11px] font-black text-indigo-600 uppercase tracking-widest">备份专家</h4>
                 </div>
+                <p className="text-[10px] text-slate-500 leading-relaxed mb-4">
+                  数据存储于您的浏览器本地。为了防止丢失，建议您定期导出备份：
+                </p>
                 
-                <div className="grid grid-cols-2 gap-3">
-                  <button 
-                    onClick={handleExport}
-                    className="flex flex-col items-center p-4 bg-indigo-50/50 rounded-2xl hover:bg-indigo-100 transition-colors text-indigo-600 border border-indigo-100/50"
-                  >
-                    <i className="fas fa-file-export text-xl mb-2"></i>
-                    <span className="text-[11px] font-bold">导出备份</span>
-                  </button>
-                  <button 
-                    onClick={() => fileInputRef.current?.click()}
-                    className="flex flex-col items-center p-4 bg-emerald-50 rounded-2xl hover:bg-emerald-100 transition-colors text-emerald-600 border border-emerald-100/50"
-                  >
-                    <i className="fas fa-file-import text-xl mb-2"></i>
-                    <span className="text-[11px] font-bold">导入恢复</span>
-                  </button>
-                </div>
-                {lastExport && (
-                  <p className="mt-3 text-[9px] text-slate-300 text-center font-medium italic">最近备份: {lastExport}</p>
-                )}
+                <button 
+                  onClick={handleExport}
+                  className="w-full flex items-center justify-center space-x-2 py-4 bg-white rounded-2xl shadow-sm border border-slate-200 hover:bg-slate-50 transition-all text-slate-600"
+                >
+                  <i className="fas fa-download text-sm"></i>
+                  <span className="text-xs font-black">导出备份文件 (.json)</span>
+                </button>
               </div>
 
-              <input 
-                type="file" 
-                ref={fileInputRef} 
-                className="hidden" 
-                accept=".json" 
-                onChange={handleImportClick} 
-              />
+              <div className="p-4 border border-slate-100 rounded-2xl">
+                <div className="flex justify-between items-center mb-3">
+                  <span className="text-[11px] font-bold text-slate-400">数据恢复</span>
+                  <span className="text-[9px] font-bold text-indigo-400">当前 {logs.length} 项记录</span>
+                </div>
+                <button 
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full flex items-center justify-center space-x-2 py-3 bg-slate-50 text-slate-500 rounded-xl hover:bg-slate-100 transition-colors border border-dashed border-slate-300"
+                >
+                  <i className="fas fa-file-import text-xs"></i>
+                  <span className="text-[11px] font-bold">导入本地备份文件</span>
+                </button>
+              </div>
+
+              {lastExport && (
+                <div className="bg-emerald-50 rounded-xl p-3 flex items-center space-x-3">
+                  <i className="fas fa-check-circle text-emerald-500 text-xs"></i>
+                  <p className="text-[9px] text-emerald-700 font-bold italic">最近一次成功导出: {lastExport}</p>
+                </div>
+              )}
             </div>
+
+            <input 
+              type="file" 
+              ref={fileInputRef} 
+              className="hidden" 
+              accept=".json" 
+              onChange={handleImportClick} 
+            />
           </div>
         </div>
       )}
@@ -231,13 +243,9 @@ export const Header: React.FC<HeaderProps> = ({ profile, onEditProfile, logs, to
                 <span className="text-[10px] text-slate-400 font-bold">包含记录</span>
                 <span className="text-xs font-black text-slate-700">{pendingImport.logCount} 条</span>
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-[10px] text-slate-400 font-bold">包含待办</span>
-                <span className="text-xs font-black text-slate-700">{pendingImport.todoCount} 项</span>
-              </div>
             </div>
             <p className="text-[10px] text-rose-400 mb-6 font-bold leading-relaxed px-4">
-              ⚠️ 注意：恢复后将完全覆盖当前设备上的所有数据！
+              ⚠️ 注意：导入将完全覆盖当前设备上的所有数据！
             </p>
             <div className="grid grid-cols-2 gap-3 w-full">
               <button onClick={() => setPendingImport(null)} className="py-4 rounded-2xl bg-slate-100 text-slate-500 font-bold text-xs active:scale-95 transition-all">取消</button>

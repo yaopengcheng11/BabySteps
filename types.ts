@@ -6,8 +6,7 @@ export enum LogType {
   GROWTH = 'GROWTH',
   NOTE = 'NOTE',
   VACCINE = 'VACCINE',
-  ADVICE = 'ADVICE',
-  TODO = 'TODO'
+  ADVICE = 'ADVICE'
 }
 
 export enum FeedingMethod {
@@ -82,21 +81,20 @@ export interface AdviceLog extends BabyLogBase {
   reportType?: 'day' | 'week' | 'month' | 'custom';
 }
 
-export interface BabyTodo {
-  id: string;
-  text: string;
-  completed: boolean;
-  createdAt: number;
-  targetDate: number; 
-  reminderTime?: number; // 新增：提醒的具体时间戳
-  isNotified?: boolean;  // 新增：是否已触发过通知
-  category?: 'shopping' | 'medical' | 'daily' | 'other';
-}
-
 export type BabyLog = FeedingLog | SleepLog | DiaperLog | GrowthLog | NoteLog | VaccineLog | AdviceLog;
 
 export interface BabyProfile {
   name: string;
   birthDate: string;
   gender: 'boy' | 'girl';
+}
+
+// Added BabyTodo interface to fix compilation error in TodoSection.tsx
+export interface BabyTodo {
+  id: string;
+  text: string;
+  completed: boolean;
+  category: 'daily' | 'medical' | 'shopping' | 'other';
+  createdAt: number;
+  reminderTime?: number;
 }

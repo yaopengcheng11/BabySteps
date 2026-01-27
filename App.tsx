@@ -1,32 +1,30 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { LogType, BabyLog, FeedingMethod, DiaperStatus, BabyProfile, AdviceLog, BabyTodo } from './types';
+import { LogType, BabyLog, FeedingMethod, DiaperStatus, BabyProfile, AdviceLog } from './types';
 import { Header } from './components/Header';
 import { LogCard } from './components/LogCard';
 import { ActionButtons } from './components/ActionButtons';
 import { StatsSection } from './components/StatsSection';
 import { AIAdviceSection } from './components/AIAdviceSection';
 import { ProfileSetup } from './components/ProfileSetup';
-import { TodoSection } from './components/TodoSection';
+import { NoteBoard } from './components/NoteBoard';
 
 const STORAGE_KEY_LOGS = 'babysteps_logs_v1';
 const STORAGE_KEY_PROFILE = 'babysteps_profile_v1';
-const STORAGE_KEY_TODOS = 'babysteps_todos_v1';
 
 export type ViewUnit = 'day' | 'week' | 'month' | 'custom';
-export type AppTab = 'timeline' | 'stats' | 'ai' | 'todo';
+export type AppTab = 'timeline' | 'notes' | 'stats' | 'ai';
 
 const App: React.FC = () => {
   const [logs, setLogs] = useState<BabyLog[]>([]);
-  const [todos, setTodos] = useState<BabyTodo[]>([]);
   const [profile, setProfile] = useState<BabyProfile | null>(null);
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [activeTab, setActiveTab] = useState<AppTab>('timeline');
   const [isInitialized, setIsInitialized] = useState(false);
   const [selectedFilters, setSelectedFilters] = useState<Set<LogType>>(new Set(Object.values(LogType)));
   const [viewUnit, setViewUnit] = useState<ViewUnit>('day');
   const [viewAnchorDate, setViewAnchorDate] = useState<Date>(new Date());
   
-  // 记录哪些日期分组是展开的
   const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set());
   
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
@@ -38,10 +36,6 @@ const App: React.FC = () => {
   });
 
   useEffect(() => {
-    if ("Notification" in window && Notification.permission === "default") {
-      Notification.requestPermission();
-    }
-
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e);
@@ -54,11 +48,9 @@ const App: React.FC = () => {
 
     const savedLogs = localStorage.getItem(STORAGE_KEY_LOGS);
     const savedProfile = localStorage.getItem(STORAGE_KEY_PROFILE);
-    const savedTodos = localStorage.getItem(STORAGE_KEY_TODOS);
     
     if (savedLogs) setLogs(JSON.parse(savedLogs));
     if (savedProfile) setProfile(JSON.parse(savedProfile));
-    if (savedTodos) setTodos(JSON.parse(savedTodos));
     
     setIsInitialized(true);
 
@@ -66,40 +58,14 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (!isInitialized) return;
-    const checkReminders = () => {
-      const now = Date.now();
-      let updated = false;
-      const newTodos = todos.map(todo => {
-        if (!todo.completed && todo.reminderTime && !todo.isNotified && now >= todo.reminderTime) {
-          if ("Notification" in window && Notification.permission === "granted") {
-            new Notification("👶 育儿提醒", {
-              body: `该完成啦：${todo.text}`,
-              icon: "https://cdn-icons-png.flaticon.com/512/3041/3041215.png"
-            });
-          }
-          updated = true;
-          return { ...todo, isNotified: true };
-        }
-        return todo;
-      });
-      if (updated) setTodos(newTodos);
-    };
-    const intervalId = setInterval(checkReminders, 30000);
-    return () => clearInterval(intervalId);
-  }, [todos, isInitialized]);
-
-  useEffect(() => {
     if (isInitialized) {
       localStorage.setItem(STORAGE_KEY_LOGS, JSON.stringify(logs));
       localStorage.setItem(STORAGE_KEY_PROFILE, JSON.stringify(profile));
-      localStorage.setItem(STORAGE_KEY_TODOS, JSON.stringify(todos));
     }
-  }, [logs, todos, profile, isInitialized]);
+  }, [logs, profile, isInitialized]);
 
   const handleAddLog = (log: BabyLog) => {
     setLogs(prev => [log, ...prev].sort((a, b) => b.timestamp - a.timestamp));
-    // 新增记录时自动展开对应日期
     const dateStr = new Date(log.timestamp).toLocaleDateString('zh-CN', {
       year: 'numeric', month: 'long', day: 'numeric', weekday: 'long'
     });
@@ -110,31 +76,17 @@ const App: React.FC = () => {
     setLogs(prev => prev.filter(l => l.id !== id));
   };
 
-  const handleAddTodo = (text: string, category: BabyTodo['category'] = 'daily', targetDate?: number, reminderTime?: number) => {
-    const newTodo: BabyTodo = {
-      id: Date.now().toString(),
-      text,
-      completed: false,
-      createdAt: Date.now(),
-      targetDate: targetDate || viewAnchorDate.getTime(),
-      reminderTime,
-      isNotified: false,
-      category
-    };
-    setTodos(prev => [newTodo, ...prev]);
-  };
-
-  const handleToggleTodo = (id: string) => {
-    setTodos(prev => prev.map(t => t.id === id ? { ...t, completed: !t.completed } : t));
-  };
-
-  const handleDeleteTodo = (id: string) => {
-    setTodos(prev => prev.filter(t => t.id !== id));
-  };
-
   const handleSaveProfile = (newProfile: BabyProfile) => {
     setProfile(newProfile);
+    setIsEditingProfile(false);
     localStorage.setItem(STORAGE_KEY_PROFILE, JSON.stringify(newProfile));
+  };
+
+  const handleImportData = (importedLogs: BabyLog[], importedProfile: BabyProfile) => {
+    if (importedLogs) setLogs(importedLogs);
+    if (importedProfile) setProfile(importedProfile);
+    setIsEditingProfile(false);
+    setExpandedDates(new Set());
   };
 
   const handleInstallApp = async () => {
@@ -202,10 +154,6 @@ const App: React.FC = () => {
     return logs.filter(log => log.timestamp >= currentRange.startTs && log.timestamp < currentRange.endTs);
   }, [logs, currentRange]);
 
-  const filteredTodos = useMemo(() => {
-    return todos.filter(todo => todo.targetDate >= currentRange.startTs && todo.targetDate < currentRange.endTs);
-  }, [todos, currentRange]);
-
   const groupedLogs = useMemo(() => {
     const groups: { [key: string]: BabyLog[] } = {};
     filteredLogs.forEach(log => {
@@ -220,12 +168,9 @@ const App: React.FC = () => {
     });
     
     const result = Object.entries(groups).sort((a, b) => b[1][0].timestamp - a[1][0].timestamp);
-    
-    // 默认展开最新的2个日期
     if (expandedDates.size === 0 && result.length > 0) {
       setExpandedDates(new Set([result[0][0], result[1]?.[0]].filter(Boolean)));
     }
-    
     return result;
   }, [filteredLogs]);
 
@@ -297,6 +242,7 @@ const App: React.FC = () => {
       { type: LogType.VACCINE, icon: 'fa-syringe', label: '疫苗', color: 'bg-emerald-500' },
       { type: LogType.GROWTH, icon: 'fa-weight-scale', label: '成长', color: 'bg-rose-400' },
       { type: LogType.ADVICE, icon: 'fa-robot', label: '简报', color: 'bg-indigo-600' },
+      { type: LogType.NOTE, icon: 'fa-sticky-note', label: '便签', color: 'bg-amber-400' },
     ];
     return (
       <div className="flex space-x-2 overflow-x-auto no-scrollbar pb-1 pt-1">
@@ -320,22 +266,22 @@ const App: React.FC = () => {
   };
 
   if (!isInitialized) return null;
-  if (!profile) return <ProfileSetup onSave={handleSaveProfile} />;
+  if (!profile || isEditingProfile) return (
+    <ProfileSetup 
+      initialData={profile || undefined}
+      onSave={handleSaveProfile} 
+      onImport={handleImportData} 
+      onCancel={profile ? () => setIsEditingProfile(false) : undefined}
+    />
+  );
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col overflow-hidden">
       <Header 
         profile={profile} 
-        onEditProfile={() => setProfile(null)} 
+        onEditProfile={() => setIsEditingProfile(true)} 
         logs={logs}
-        todos={todos}
-        onImportData={(importedLogs, importedProfile, importedTodos) => {
-          if (importedLogs) setLogs(importedLogs);
-          if (importedProfile) setProfile(importedProfile);
-          if (importedTodos) setTodos(importedTodos);
-          // 清理展开日期以触发重新计算
-          setExpandedDates(new Set());
-        }}
+        onImportData={handleImportData}
         isInstallable={!!deferredPrompt}
         onInstall={handleInstallApp}
       />
@@ -362,17 +308,17 @@ const App: React.FC = () => {
         )}
 
         <div className="mb-6 bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
-           <ActionButtons onAddLog={handleAddLog} birthDate={profile.birthDate} onAddTodo={handleAddTodo} currentAnchorDate={viewAnchorDate} />
+           <ActionButtons onAddLog={handleAddLog} birthDate={profile.birthDate} currentAnchorDate={viewAnchorDate} />
         </div>
 
         <div className="flex bg-white rounded-full p-1 mb-6 shadow-sm border border-slate-100 sticky top-0 z-30 overflow-x-auto no-scrollbar">
-          {(['timeline', 'todo', 'stats', 'ai'] as const).map((tab) => (
+          {(['timeline', 'notes', 'stats', 'ai'] as const).map((tab) => (
             <button 
               key={tab}
               onClick={() => setActiveTab(tab)}
               className={`flex-1 min-w-[60px] py-2.5 rounded-full text-[11px] font-bold transition-all whitespace-nowrap ${activeTab === tab ? 'bg-indigo-500 text-white shadow-md' : 'text-slate-500'}`}
             >
-              {tab === 'timeline' ? '时光轴' : tab === 'todo' ? '待办' : tab === 'stats' ? '统计看板' : 'AI 专家'}
+              {tab === 'timeline' ? '时光轴' : tab === 'notes' ? '便签看板' : tab === 'stats' ? '统计看板' : 'AI 专家'}
             </button>
           ))}
         </div>
@@ -417,7 +363,6 @@ const App: React.FC = () => {
               
               return (
                 <section key={date} className="relative">
-                  {/* Sticky Date Header with Daily Summary Pills */}
                   <div 
                     onClick={() => toggleDateExpanded(date)}
                     className="sticky top-0 z-20 bg-slate-50/95 backdrop-blur-sm py-2 px-1 flex items-center justify-between cursor-pointer group transition-all"
@@ -448,25 +393,18 @@ const App: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Vertical Timeline Line and Log Cards */}
                   {isExpanded && (
                     <div className="ml-1 pl-6 border-l-2 border-indigo-100/50 space-y-4 py-4 animate-fade-in relative">
-                      {/* Gradient Line Effect */}
                       <div className="absolute left-[-2px] top-0 bottom-0 w-[2px] bg-gradient-to-b from-indigo-100/0 via-indigo-100 to-indigo-100/0"></div>
                       
                       {dayLogs.map((log, logIdx) => {
-                        // Calculate time gap with previous log (if any)
-                        const prevLog = dayLogs[logIdx + 1]; // Sort is desc, so +1 is "earlier" in the same day list
+                        const prevLog = dayLogs[logIdx + 1];
                         const timeGapHours = prevLog ? (log.timestamp - prevLog.timestamp) / (1000 * 60 * 60) : 0;
                         
                         return (
                           <div key={log.id} className="relative">
-                            {/* Dot indicator on the line */}
                             <div className="absolute left-[-31px] top-6 w-2.5 h-2.5 rounded-full bg-white border-2 border-indigo-400 ring-4 ring-slate-50 z-10"></div>
-                            
                             <LogCard log={log} onDelete={() => handleDeleteLog(log.id)} />
-                            
-                            {/* Time gap indicator */}
                             {timeGapHours >= 4 && (
                               <div className="flex items-center space-x-2 my-2 -ml-2 opacity-30 select-none">
                                 <div className="h-px w-4 bg-indigo-200"></div>
@@ -494,8 +432,8 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {activeTab === 'todo' && (
-          <TodoSection todos={filteredTodos} onAddTodo={(text, cat) => handleAddTodo(text, cat, viewAnchorDate.getTime())} onToggleTodo={handleToggleTodo} onDeleteTodo={handleDeleteTodo} rangeLabel={getRangeLabel()} />
+        {activeTab === 'notes' && (
+          <NoteBoard logs={statsLogs} rangeLabel={getRangeLabel()} onDelete={handleDeleteLog} />
         )}
 
         {activeTab === 'stats' && (
@@ -508,10 +446,10 @@ const App: React.FC = () => {
       </main>
 
       <nav className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-lg border-t border-slate-200 flex justify-around py-3 px-6 z-40 safe-pb shadow-[0_-5px_20px_rgba(0,0,0,0.03)] overflow-x-auto no-scrollbar">
-        {(['timeline', 'todo', 'stats', 'ai'] as const).map((tab) => (
+        {(['timeline', 'notes', 'stats', 'ai'] as const).map((tab) => (
           <button key={tab} onClick={() => setActiveTab(tab)} className={`flex flex-col items-center transition-colors px-4 min-w-[60px] ${activeTab === tab ? 'text-indigo-600' : 'text-slate-400'}`}>
-            <i className={`fas ${tab === 'timeline' ? 'fa-list-ul' : tab === 'todo' ? 'fa-clipboard-list' : tab === 'stats' ? 'fa-chart-line' : 'fa-robot'} text-lg`}></i>
-            <span className="text-[10px] mt-1 font-bold">{tab === 'timeline' ? '时光轴' : tab === 'todo' ? '待办' : tab === 'stats' ? '统计看板' : 'AI 专家'}</span>
+            <i className={`fas ${tab === 'timeline' ? 'fa-list-ul' : tab === 'notes' ? 'fa-sticky-note' : tab === 'stats' ? 'fa-chart-line' : 'fa-robot'} text-lg`}></i>
+            <span className="text-[10px] mt-1 font-bold">{tab === 'timeline' ? '时光轴' : tab === 'notes' ? '便签看板' : tab === 'stats' ? '统计看板' : 'AI 专家'}</span>
           </button>
         ))}
       </nav>
