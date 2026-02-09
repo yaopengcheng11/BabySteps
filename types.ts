@@ -1,12 +1,12 @@
 
 export enum LogType {
   FEEDING = 'FEEDING',
-  SLEEP = 'SLEEP',
   DIAPER = 'DIAPER',
   GROWTH = 'GROWTH',
   NOTE = 'NOTE',
   VACCINE = 'VACCINE',
-  ADVICE = 'ADVICE'
+  ADVICE = 'ADVICE',
+  SUPPLEMENT = 'SUPPLEMENT'
 }
 
 export enum FeedingMethod {
@@ -40,14 +40,11 @@ export interface BabyLogBase {
 export interface FeedingLog extends BabyLogBase {
   type: LogType.FEEDING;
   amount?: number;
-  duration?: number;
+  duration?: number; // 总时长
+  leftDuration?: number; // 左侧时长
+  rightDuration?: number; // 右侧时长
   method: FeedingMethod;
-}
-
-export interface SleepLog extends BabyLogBase {
-  type: LogType.SLEEP;
-  duration: number;
-  endTime: number;
+  side?: '左' | '右' | '双侧';
 }
 
 export interface DiaperLog extends BabyLogBase {
@@ -69,6 +66,12 @@ export interface VaccineLog extends BabyLogBase {
   nextDoseDate?: string;
 }
 
+export interface SupplementLog extends BabyLogBase {
+  type: LogType.SUPPLEMENT;
+  name: string;
+  dosage?: string;
+}
+
 export interface NoteLog extends BabyLogBase {
   type: LogType.NOTE;
   content: string;
@@ -81,7 +84,7 @@ export interface AdviceLog extends BabyLogBase {
   reportType?: 'day' | 'week' | 'month' | 'custom';
 }
 
-export type BabyLog = FeedingLog | SleepLog | DiaperLog | GrowthLog | NoteLog | VaccineLog | AdviceLog;
+export type BabyLog = FeedingLog | DiaperLog | GrowthLog | NoteLog | VaccineLog | AdviceLog | SupplementLog;
 
 export interface BabyProfile {
   name: string;
@@ -89,7 +92,6 @@ export interface BabyProfile {
   gender: 'boy' | 'girl';
 }
 
-// Added BabyTodo interface to fix compilation error in TodoSection.tsx
 export interface BabyTodo {
   id: string;
   text: string;

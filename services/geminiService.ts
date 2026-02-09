@@ -4,7 +4,7 @@ import { BabyLog, BabyProfile, LogType } from "../types";
 
 /**
  * 根据所选时间范围生成 AI 育儿简报
- * 升级版：提供更有深度、月龄相关的专业洞察
+ * 升级版：专注于喂养、排泄、成长规律，移除睡眠模块
  */
 export const getAIReport = async (
   profile: BabyProfile, 
@@ -23,7 +23,7 @@ export const getAIReport = async (
   const ageRemainderDays = ageInDays % 30;
   const ageContext = `${ageInMonths}个月${ageRemainderDays}天 (共${ageInDays}天)`;
 
-  // 格式化记录汇总（增加数据密度）
+  // 格式化记录汇总
   const logSummary = logs.map(log => {
     const date = new Date(log.timestamp).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' });
     const time = new Date(log.timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
@@ -31,7 +31,6 @@ export const getAIReport = async (
     
     switch (log.type) {
       case LogType.FEEDING: return `- [${dateTime}] 喂养: ${log.method} ${log.amount ? log.amount + 'ml' : log.duration + 'min'}`;
-      case LogType.SLEEP: return `- [${dateTime}] 睡眠: 持续 ${log.duration}分钟`;
       case LogType.GROWTH: return `- [${date}] 成长: ${log.eventName} (类别: ${log.category}) ${log.weight ? '体重:' + log.weight + 'kg' : ''}`;
       case LogType.DIAPER: return `- [${dateTime}] 排泄: ${log.status}`;
       default: return "";
@@ -59,22 +58,22 @@ ${logSummary || "（该周期内暂无详细记录，请根据月龄提供一般
 请扮演一位拥有 20 年经验的“资深儿科专家兼心理咨询师”，基于以上数据和月龄，撰写一份极具深度、科学且贴心的分析报告。
 
 要求如下：
-1. **深度洞察**：不要只复述数据，要分析规律。例如：喂养量是否达标？睡眠周期是否规律？排泄情况是否反映肠胃健康？
-2. **月龄关联**：必须结合宝宝当前 ${ageInMonths} 个月的发育重点（如：抬头、翻身、追视、辅食添加、睡整觉训练等）给出专业评价。
+1. **深度洞察**：分析记录中的规律。例如：喂养量是否达标？排泄情况是否反映肠胃健康？
+2. **月龄关联**：必须结合宝宝当前 ${ageInMonths} 个月的发育重点（如：抬头、翻身、追视、辅食添加、感官训练等）给出专业评价。
 3. **结构化呈现**：
    - 📊 **【深度成长分析】**：分析记录中的趋势与潜在问题。
    - 🌟 **【本月龄发育重点】**：提醒父母这个阶段宝宝该学习的新技能或注意的健康指标。
-   - 🛠️ **【专家级护理建议】**：给出 3-4 条极具实操性的建议（包括喂养调整、睡眠环境、感官训练等）。
+   - 🛠 {**【专家级护理建议】**：给出 3-4 条极具实操性的建议（包括喂养调整、感官训练、肠胃护理等）。
    - 💖 **【致亲爱的父母】**：一段深度共情的文字，缓解家长的育儿焦虑。
-4. **语气与排版**：语气专业、温暖、权威。总字数建议在 400 字左右，使用 Markdown 格式，多用加粗和分段。
+4. **语气与排版**：语气专业、温暖、权威。总字数约 400 字，使用 Markdown 格式。不包含睡眠相关的建议。
 `;
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-3-pro-preview', // 升级为 Pro 模型以获取更深度的逻辑推理
+      model: 'gemini-3-pro-preview',
       contents: prompt,
       config: {
-        systemInstruction: "你是一位精通儿科学、儿童心理学和婴幼儿营养学的顶级专家。你的回答应该基于世界卫生组织（WHO）和最新的育儿科学研究。严禁提供迷信或未经证实的偏方。",
+        systemInstruction: "你是一位精通儿科学、儿童心理学和婴幼儿营养学的顶级专家。你的回答应该基于世界卫生组织（WHO）和最新的育儿科学研究。不建议或讨论睡眠问题。",
         temperature: 0.75,
         topP: 0.9,
       },

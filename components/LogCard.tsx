@@ -1,21 +1,22 @@
 
 import React, { useState } from 'react';
-import { BabyLog, LogType, FeedingMethod, GrowthCategory } from '../types';
+import { BabyLog, LogType, FeedingMethod, GrowthCategory, FeedingLog } from '../types';
 
 interface LogCardProps {
   log: BabyLog;
   onDelete: () => void;
+  onEdit: () => void;
 }
 
-export const LogCard: React.FC<LogCardProps> = ({ log, onDelete }) => {
+export const LogCard: React.FC<LogCardProps> = ({ log, onDelete, onEdit }) => {
   const [isAdviceExpanded, setIsAdviceExpanded] = useState(false);
 
   const getIcon = () => {
     switch (log.type) {
       case LogType.FEEDING: return { i: 'fa-bottle-water', c: 'bg-orange-100 text-orange-600', b: 'border-orange-100' };
-      case LogType.SLEEP: return { i: 'fa-moon', c: 'bg-indigo-100 text-indigo-600', b: 'border-indigo-100' };
       case LogType.DIAPER: return { i: 'fa-poop', c: 'bg-teal-100 text-teal-600', b: 'border-teal-100' };
       case LogType.VACCINE: return { i: 'fa-syringe', c: 'bg-emerald-100 text-emerald-600', b: 'border-emerald-100' };
+      case LogType.SUPPLEMENT: return { i: 'fa-capsules', c: 'bg-indigo-100 text-indigo-600', b: 'border-indigo-100' };
       case LogType.GROWTH: 
         const isMilestone = log.category === GrowthCategory.MILESTONE || log.category === GrowthCategory.SKILL;
         return { 
@@ -44,9 +45,9 @@ export const LogCard: React.FC<LogCardProps> = ({ log, onDelete }) => {
             <div className="flex flex-col min-w-0 pr-4">
               <h4 className="font-black text-slate-800 text-[13px] leading-tight truncate">
                 {log.type === LogType.FEEDING && `喂养: ${log.method}`}
-                {log.type === LogType.SLEEP && '开始睡觉'}
                 {log.type === LogType.DIAPER && `换尿布: ${log.status}`}
                 {log.type === LogType.VACCINE && `疫苗接种`}
+                {log.type === LogType.SUPPLEMENT && `营养补充: ${log.name}`}
                 {log.type === LogType.ADVICE && log.title}
                 {log.type === LogType.GROWTH && (
                   <span className="flex items-center truncate">
@@ -64,24 +65,54 @@ export const LogCard: React.FC<LogCardProps> = ({ log, onDelete }) => {
               </span>
             </div>
             
-            <button 
-              onClick={(e) => { e.stopPropagation(); onDelete(); }}
-              className="opacity-0 group-hover:opacity-100 p-1.5 text-slate-300 hover:text-rose-500 transition-all focus:opacity-100 -mr-1 -mt-1"
-              aria-label="删除记录"
-            >
-              <i className="fas fa-trash-alt text-[9px]"></i>
-            </button>
+            <div className="flex items-center space-x-1 -mr-1 -mt-1">
+              <button 
+                onClick={(e) => { e.stopPropagation(); onEdit(); }}
+                className="opacity-0 group-hover:opacity-100 p-1.5 text-slate-300 hover:text-indigo-500 transition-all focus:opacity-100"
+                aria-label="编辑记录"
+              >
+                <i className="fas fa-edit text-[9px]"></i>
+              </button>
+              <button 
+                onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                className="opacity-0 group-hover:opacity-100 p-1.5 text-slate-300 hover:text-rose-500 transition-all focus:opacity-100"
+                aria-label="删除记录"
+              >
+                <i className="fas fa-trash-alt text-[9px]"></i>
+              </button>
+            </div>
           </div>
 
           <div className="mt-1.5">
             <div className="text-slate-600 font-bold text-[11px] leading-snug">
               {log.type === LogType.FEEDING && (
-                log.method === FeedingMethod.BREAST 
-                  ? `${log.duration} 分钟` 
-                  : <span className="text-orange-500 font-black">{log.amount} ml</span>
+                <div className="flex flex-col space-y-1">
+                  <div className="flex items-center space-x-2">
+                    {log.method === FeedingMethod.BREAST ? (
+                      <div className="flex flex-col space-y-0.5">
+                        <div className="flex items-center space-x-1.5">
+                          <span className="text-orange-500 font-black">总共 {log.duration} 分钟</span>
+                          <span className="text-[9px] bg-orange-50 text-orange-400 px-1.5 py-0.5 rounded-md border border-orange-100 font-black uppercase">{log.side}</span>
+                        </div>
+                        <div className="flex items-center space-x-2 text-[9px] text-slate-400">
+                          {log.leftDuration && <span>左: {log.leftDuration} min</span>}
+                          {log.leftDuration && log.rightDuration && <span className="opacity-20">|</span>}
+                          {log.rightDuration && <span>右: {log.rightDuration} min</span>}
+                        </div>
+                      </div>
+                    ) : (
+                      <span className="text-orange-500 font-black">{log.amount} ml</span>
+                    )}
+                  </div>
+                </div>
               )}
-              {log.type === LogType.SLEEP && `${Math.floor(log.duration / 60)}h ${log.duration % 60}m`}
               {log.type === LogType.DIAPER && `状态：${log.status}`}
+              {log.type === LogType.SUPPLEMENT && (
+                <div className="flex items-center space-x-2">
+                   <span className="text-indigo-600 font-black">{log.name}</span>
+                   {log.dosage && <span className="text-slate-400 text-[9px] bg-slate-100 px-1.5 py-0.5 rounded-md">剂量: {log.dosage}</span>}
+                </div>
+              )}
               {log.type === LogType.ADVICE && (
                 <div className="space-y-2">
                   <div className={`bg-indigo-50/40 rounded-xl p-3 text-[10px] leading-relaxed text-indigo-700/80 border border-indigo-100/30 italic ${!isAdviceExpanded ? 'line-clamp-2' : ''}`}>
