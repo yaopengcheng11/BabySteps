@@ -8,6 +8,7 @@ interface AIAdviceSectionProps {
   logs: BabyLog[];
   viewUnit: 'day' | 'week' | 'month' | 'custom';
   rangeLabel: string;
+  viewAnchorDate: Date;
   filteredLogs: BabyLog[];
   onSaveAdvice: (log: AdviceLog) => void;
   onDeleteAdvice: (id: string) => void;
@@ -15,14 +16,15 @@ interface AIAdviceSectionProps {
 
 type ArchiveFilter = 'all' | 'day' | 'week' | 'month';
 
-export const AIAdviceSection: React.FC<AIAdviceSectionProps> = ({ 
-  profile, 
-  logs, 
-  viewUnit, 
-  rangeLabel, 
+export const AIAdviceSection: React.FC<AIAdviceSectionProps> = ({
+  profile,
+  logs,
+  viewUnit,
+  rangeLabel,
+  viewAnchorDate,
   filteredLogs,
-  onSaveAdvice, 
-  onDeleteAdvice 
+  onSaveAdvice,
+  onDeleteAdvice
 }) => {
   const [advice, setAdvice] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
@@ -62,14 +64,15 @@ export const AIAdviceSection: React.FC<AIAdviceSectionProps> = ({
     setLoading(true);
     setJustSaved(false);
     const logsToAnalyze = filteredLogs.filter(l => l.type !== LogType.ADVICE);
-    const result = await getAIReport(profile, logsToAnalyze, viewUnit, rangeLabel);
+    // 传递 viewAnchorDate 以确保 AI 以该日期为基准计算月龄
+    const result = await getAIReport(profile, logsToAnalyze, viewUnit, rangeLabel, viewAnchorDate);
     setAdvice(result);
     setLoading(false);
   };
 
   const handleArchive = () => {
     if (!advice || justSaved) return;
-    
+
     const newAdviceLog: AdviceLog = {
       id: Date.now().toString(),
       type: LogType.ADVICE,
@@ -107,7 +110,7 @@ export const AIAdviceSection: React.FC<AIAdviceSectionProps> = ({
           </div>
           <p className="text-[10px] text-white/60 font-medium ml-13">{rangeLabel} 数据分析</p>
         </div>
-        
+
         {loading ? (
           <div className="py-12 flex flex-col items-center justify-center space-y-4">
             <div className="flex space-x-1">
@@ -122,7 +125,7 @@ export const AIAdviceSection: React.FC<AIAdviceSectionProps> = ({
             <div className="bg-white/10 backdrop-blur-xl rounded-[1.5rem] p-6 leading-relaxed text-sm font-medium border border-white/10 whitespace-pre-wrap shadow-inner min-h-[100px]">
               {advice}
             </div>
-            
+
             <div className="grid grid-cols-2 gap-3">
               <button onClick={fetchAdvice} className="bg-white/20 backdrop-blur-md text-white font-bold py-4 rounded-2xl hover:bg-white/30 transition-all active:scale-95 flex items-center justify-center space-x-2 border border-white/20">
                 <i className="fas fa-sync-alt text-xs"></i>
@@ -163,9 +166,8 @@ export const AIAdviceSection: React.FC<AIAdviceSectionProps> = ({
             <button
               key={f}
               onClick={() => { setArchiveFilter(f); setShowLimit(5); }}
-              className={`flex-1 min-w-[60px] py-2 rounded-xl text-[10px] font-bold transition-all flex flex-col items-center justify-center space-y-0.5 ${
-                archiveFilter === f ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400'
-              }`}
+              className={`flex-1 min-w-[60px] py-2 rounded-xl text-[10px] font-bold transition-all flex flex-col items-center justify-center space-y-0.5 ${archiveFilter === f ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400'
+                }`}
             >
               <span>{f === 'all' ? '全部' : f === 'day' ? '日报' : f === 'week' ? '周报' : '月报'}</span>
               <span className={`text-[8px] font-medium opacity-60`}>{counts[f]}</span>
@@ -187,16 +189,15 @@ export const AIAdviceSection: React.FC<AIAdviceSectionProps> = ({
               return (
                 <div key={log.id} className={`bg-white rounded-2xl border transition-all duration-300 ${isExpanded ? 'shadow-md border-indigo-100 ring-1 ring-indigo-50' : 'shadow-sm border-slate-100'}`}>
                   {/* Compact Summary Header */}
-                  <div 
+                  <div
                     onClick={() => setExpandedId(isExpanded ? null : log.id)}
                     className="flex items-center justify-between p-3 cursor-pointer select-none"
                   >
                     <div className="flex items-center space-x-3 overflow-hidden">
-                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                        log.reportType === 'day' ? 'bg-orange-50 text-orange-500' : 
-                        log.reportType === 'week' ? 'bg-indigo-50 text-indigo-500' : 
-                        'bg-teal-50 text-teal-500'
-                      }`}>
+                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${log.reportType === 'day' ? 'bg-orange-50 text-orange-500' :
+                          log.reportType === 'week' ? 'bg-indigo-50 text-indigo-500' :
+                            'bg-teal-50 text-teal-500'
+                        }`}>
                         <i className={`fas ${log.reportType === 'day' ? 'fa-calendar-day' : log.reportType === 'week' ? 'fa-calendar-week' : 'fa-calendar-alt'} text-[10px]`}></i>
                       </div>
                       <div className="overflow-hidden">
@@ -207,7 +208,7 @@ export const AIAdviceSection: React.FC<AIAdviceSectionProps> = ({
                       </div>
                     </div>
                     <div className="flex items-center space-x-2">
-                      <button 
+                      <button
                         onClick={(e) => { e.stopPropagation(); onDeleteAdvice(log.id); }}
                         className="w-7 h-7 flex items-center justify-center text-slate-200 hover:text-rose-400 transition-colors"
                       >
@@ -216,7 +217,7 @@ export const AIAdviceSection: React.FC<AIAdviceSectionProps> = ({
                       <i className={`fas fa-chevron-down text-[9px] text-slate-300 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}></i>
                     </div>
                   </div>
-                  
+
                   {/* Expanded Content */}
                   {isExpanded && (
                     <div className="px-4 pb-4 animate-fade-in">
@@ -229,9 +230,9 @@ export const AIAdviceSection: React.FC<AIAdviceSectionProps> = ({
                 </div>
               );
             })}
-            
+
             {filteredArchives.length > showLimit && (
-              <button 
+              <button
                 onClick={() => setShowLimit(prev => prev + 10)}
                 className="w-full py-3 text-[10px] font-bold text-slate-500 hover:text-indigo-600 transition-colors bg-white rounded-2xl border border-slate-100 shadow-sm"
               >
