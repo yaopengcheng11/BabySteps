@@ -1,20 +1,36 @@
-
-import { GoogleGenAI } from "@google/genai";
+import OpenAI from "openai";
 import { BabyLog, BabyProfile, LogType } from "../types";
 
 /**
  * 根据所选时间范围生成 AI 育儿简报
- * 升级版：提供更有深度、月龄相关的专业洞察
+ * DeepSeek 版本：利用 DeepSeek-V3/R1 的推理能力提供育儿建议
  */
 export const getAIReport = async (
-  profile: BabyProfile, 
-  logs: BabyLog[], 
+  profile: BabyProfile,
+  logs: BabyLog[],
   reportType: 'day' | 'week' | 'month' | 'custom',
   rangeLabel: string
 ) => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  // --- API Key 配置 ---
+  // 自动检测不同框架的环境变量
+  const apiKey = process.env.DEEPSEEK_API_KEY ||
+    process.env.VITE_DEEPSEEK_API_KEY ||
+    process.env.NEXT_PUBLIC_DEEPSEEK_API_KEY;
 
-  // 计算宝宝月龄，为 AI 提供发育阶段背景
+  if (!apiKey) {
+    console.error("❌ 未找到 DeepSeek API Key。请在项目根目录的 .env 文件中配置 DEEPSEEK_API_KEY。");
+    // 返回友好的错误提示给前端展示
+    return "系统未配置 AI 密钥，请联系管理员或检查 .env 配置文件。";
+  }
+
+  // 初始化 DeepSeek 客户端
+  const openai = new OpenAI({
+    baseURL: 'https://api.deepseek.com',
+    apiKey: apiKey,
+    dangerouslyAllowBrowser: true // 允许在前端直接调用（注意：生产环境建议通过后端转发以保护 Key）
+  });
+
+  // 1. 计算宝宝月龄，为 AI 提供发育阶段背景
   const birth = new Date(profile.birthDate);
   const now = new Date();
   const diffTime = Math.abs(now.getTime() - birth.getTime());
@@ -23,12 +39,12 @@ export const getAIReport = async (
   const ageRemainderDays = ageInDays % 30;
   const ageContext = `${ageInMonths}个月${ageRemainderDays}天 (共${ageInDays}天)`;
 
-  // 格式化记录汇总（增加数据密度）
+  // 2. 格式化记录汇总
   const logSummary = logs.map(log => {
     const date = new Date(log.timestamp).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' });
     const time = new Date(log.timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
     const dateTime = reportType === 'day' ? time : `${date} ${time}`;
-    
+
     switch (log.type) {
       case LogType.FEEDING: return `- [${dateTime}] 喂养: ${log.method} ${log.amount ? log.amount + 'ml' : log.duration + 'min'}`;
       case LogType.SLEEP: return `- [${dateTime}] 睡眠: 持续 ${log.duration}分钟`;
@@ -45,7 +61,8 @@ export const getAIReport = async (
     custom: '阶段深度分析'
   }[reportType];
 
-  const prompt = `
+  // 3. 构建 Prompt
+  const userPrompt = `
 # 育儿咨询背景
 宝宝姓名：${profile.name}
 性别：${profile.gender === 'boy' ? '男宝宝' : '女宝宝'}
@@ -69,20 +86,28 @@ ${logSummary || "（该周期内暂无详细记录，请根据月龄提供一般
 4. **语气与排版**：语气专业、温暖、权威。总字数建议在 400 字左右，使用 Markdown 格式，多用加粗和分段。
 `;
 
+  // 4. 系统指令
+  const systemInstruction = "你是一位精通儿科学、儿童心理学和婴幼儿营养学的顶级专家。你的回答应该基于世界卫生组织（WHO）和最新的育儿科学研究。严禁提供迷信或未经证实的偏方。";
+
   try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-pro-preview', // 升级为 Pro 模型以获取更深度的逻辑推理
-      contents: prompt,
-      config: {
-        systemInstruction: "你是一位精通儿科学、儿童心理学和婴幼儿营养学的顶级专家。你的回答应该基于世界卫生组织（WHO）和最新的育儿科学研究。严禁提供迷信或未经证实的偏方。",
-        temperature: 0.75,
-        topP: 0.9,
-      },
+    const response = await openai.chat.completions.create({
+      model: "deepseek-chat",
+      messages: [
+        { role: "system", content: systemInstruction },
+        { role: "user", content: userPrompt }
+      ],
+      temperature: 1.3,
+      max_tokens: 2000,
+      stream: false,
     });
 
-    return response.text || "AI 专家正在查阅文献，请稍后再试。";
+    return response.choices[0].message.content || "AI 专家正在思考中，请稍后再试。";
+
   } catch (error: any) {
-    console.error("Gemini API Error:", error);
+    console.error("DeepSeek API Error:", error);
+    if (error.status === 401) return "API Key 无效，请检查 .env 配置。";
+    if (error.status === 402) return "API 余额不足，请检查 DeepSeek 账户。";
+    if (error.status === 503) return "DeepSeek 服务器繁忙，请稍后重试。";
     return "由于连接专家服务器超时，请检查您的网络环境并重新尝试生成。";
   }
 };
