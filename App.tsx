@@ -8,6 +8,7 @@ import { StatsSection } from './components/StatsSection';
 import { AIAdviceSection } from './components/AIAdviceSection';
 import { ProfileSetup } from './components/ProfileSetup';
 import { NoteBoard } from './components/NoteBoard';
+import { StatusDashboard } from './components/StatusDashboard';
 
 const STORAGE_KEY_LOGS = 'babysteps_logs_v1';
 const STORAGE_KEY_PROFILE = 'babysteps_profile_v1';
@@ -26,6 +27,7 @@ const App: React.FC = () => {
   const [viewAnchorDate, setViewAnchorDate] = useState<Date>(new Date());
   
   const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set());
+  const [editingLog, setEditingLog] = useState<BabyLog | null>(null);
   
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showInstallBanner, setShowInstallBanner] = useState(false);
@@ -34,6 +36,8 @@ const App: React.FC = () => {
     start: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     end: new Date().toISOString().split('T')[0],
   });
+
+  const isValidDate = (d: any): d is Date => d instanceof Date && !isNaN(d.getTime());
 
   useEffect(() => {
     const handleBeforeInstallPrompt = (e: Event) => {
@@ -49,8 +53,20 @@ const App: React.FC = () => {
     const savedLogs = localStorage.getItem(STORAGE_KEY_LOGS);
     const savedProfile = localStorage.getItem(STORAGE_KEY_PROFILE);
     
-    if (savedLogs) setLogs(JSON.parse(savedLogs));
-    if (savedProfile) setProfile(JSON.parse(savedProfile));
+    if (savedLogs) {
+      try {
+        setLogs(JSON.parse(savedLogs));
+      } catch (e) {
+        console.error("Failed to parse logs", e);
+      }
+    }
+    if (savedProfile) {
+      try {
+        setProfile(JSON.parse(savedProfile));
+      } catch (e) {
+        console.error("Failed to parse profile", e);
+      }
+    }
     
     setIsInitialized(true);
 
@@ -66,10 +82,18 @@ const App: React.FC = () => {
 
   const handleAddLog = (log: BabyLog) => {
     setLogs(prev => [log, ...prev].sort((a, b) => b.timestamp - a.timestamp));
-    const dateStr = new Date(log.timestamp).toLocaleDateString('zh-CN', {
-      year: 'numeric', month: 'long', day: 'numeric', weekday: 'long'
-    });
-    setExpandedDates(prev => new Set(prev).add(dateStr));
+    const d = new Date(log.timestamp);
+    if (isValidDate(d)) {
+      const dateStr = d.toLocaleDateString('zh-CN', {
+        year: 'numeric', month: 'long', day: 'numeric', weekday: 'long'
+      });
+      setExpandedDates(prev => new Set(prev).add(dateStr));
+    }
+  };
+
+  const handleUpdateLog = (updatedLog: BabyLog) => {
+    setLogs(prev => prev.map(l => l.id === updatedLog.id ? updatedLog : l).sort((a, b) => b.timestamp - a.timestamp));
+    setEditingLog(null);
   };
 
   const handleDeleteLog = (id: string) => {
@@ -116,7 +140,9 @@ const App: React.FC = () => {
   const currentRange = useMemo(() => {
     let startTs = 0;
     let endTs = Infinity;
-    const startOfAnchor = new Date(viewAnchorDate);
+    
+    const validAnchor = isValidDate(viewAnchorDate) ? viewAnchorDate : new Date();
+    const startOfAnchor = new Date(validAnchor);
     startOfAnchor.setHours(0, 0, 0, 0);
 
     if (viewUnit === 'day') {
@@ -138,8 +164,11 @@ const App: React.FC = () => {
       const endOfMonth = new Date(startOfAnchor.getFullYear(), startOfAnchor.getMonth() + 1, 1);
       endTs = endOfMonth.getTime();
     } else if (viewUnit === 'custom') {
-      startTs = new Date(customRange.start).setHours(0, 0, 0, 0);
-      endTs = new Date(customRange.end).setHours(23, 59, 59, 999);
+      const customStart = customRange.start ? new Date(customRange.start) : null;
+      const customEnd = customRange.end ? new Date(customRange.end) : null;
+      
+      startTs = (customStart && isValidDate(customStart)) ? customStart.setHours(0, 0, 0, 0) : 0;
+      endTs = (customEnd && isValidDate(customEnd)) ? customEnd.setHours(23, 59, 59, 999) : Infinity;
     }
     return { startTs, endTs };
   }, [viewUnit, viewAnchorDate, customRange]);
@@ -157,7 +186,9 @@ const App: React.FC = () => {
   const groupedLogs = useMemo(() => {
     const groups: { [key: string]: BabyLog[] } = {};
     filteredLogs.forEach(log => {
-      const dateStr = new Date(log.timestamp).toLocaleDateString('zh-CN', {
+      const d = new Date(log.timestamp);
+      if (!isValidDate(d)) return;
+      const dateStr = d.toLocaleDateString('zh-CN', {
         year: 'numeric',
         month: 'long',
         day: 'numeric',
@@ -186,15 +217,12 @@ const App: React.FC = () => {
   const getDaySummary = (dayLogs: BabyLog[]) => {
     let feedingAmount = 0;
     let feedingCount = 0;
-    let sleepDuration = 0;
     let diaperCount = 0;
     
     dayLogs.forEach(log => {
       if (log.type === LogType.FEEDING) {
         feedingCount++;
         if (log.amount) feedingAmount += log.amount;
-      } else if (log.type === LogType.SLEEP) {
-        sleepDuration += log.duration;
       } else if (log.type === LogType.DIAPER) {
         diaperCount++;
       }
@@ -202,12 +230,12 @@ const App: React.FC = () => {
     
     return {
       feeding: feedingAmount > 0 ? `${feedingAmount}ml` : `${feedingCount}次`,
-      sleep: `${(sleepDuration / 60).toFixed(1)}h`,
       diaper: `${diaperCount}次`
     };
   };
 
   const navigateTime = (direction: number) => {
+    if (!isValidDate(viewAnchorDate)) return;
     const newDate = new Date(viewAnchorDate);
     if (viewUnit === 'day') newDate.setDate(newDate.getDate() + direction);
     if (viewUnit === 'week') newDate.setDate(newDate.getDate() + (direction * 7));
@@ -221,6 +249,7 @@ const App: React.FC = () => {
   };
 
   const getRangeLabel = () => {
+    if (!isValidDate(viewAnchorDate)) return '...';
     if (viewUnit === 'day') return viewAnchorDate.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' });
     if (viewUnit === 'week') {
       const day = viewAnchorDate.getDay();
@@ -231,15 +260,15 @@ const App: React.FC = () => {
       return `${start.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })} - ${end.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })}`;
     }
     if (viewUnit === 'month') return viewAnchorDate.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long' });
-    return `${customRange.start} ~ ${customRange.end}`;
+    return `${customRange.start || '...'} ~ ${customRange.end || '...'}`;
   };
 
   const FilterBar = () => {
     const config = [
       { type: LogType.FEEDING, icon: 'fa-bottle-water', label: '喂养', color: 'bg-orange-400' },
-      { type: LogType.SLEEP, icon: 'fa-moon', label: '睡眠', color: 'bg-indigo-400' },
       { type: LogType.DIAPER, icon: 'fa-poop', label: '尿布', color: 'bg-teal-400' },
       { type: LogType.VACCINE, icon: 'fa-syringe', label: '疫苗', color: 'bg-emerald-500' },
+      { type: LogType.SUPPLEMENT, icon: 'fa-capsules', label: '补充剂', color: 'bg-indigo-400' },
       { type: LogType.GROWTH, icon: 'fa-weight-scale', label: '成长', color: 'bg-rose-400' },
       { type: LogType.ADVICE, icon: 'fa-robot', label: '简报', color: 'bg-indigo-600' },
       { type: LogType.NOTE, icon: 'fa-sticky-note', label: '便签', color: 'bg-amber-400' },
@@ -307,8 +336,17 @@ const App: React.FC = () => {
           </div>
         )}
 
+        <StatusDashboard logs={logs} />
+
         <div className="mb-6 bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
-           <ActionButtons onAddLog={handleAddLog} birthDate={profile.birthDate} currentAnchorDate={viewAnchorDate} />
+           <ActionButtons 
+            onAddLog={handleAddLog} 
+            onUpdateLog={handleUpdateLog}
+            editingLog={editingLog}
+            onCloseEdit={() => setEditingLog(null)}
+            birthDate={profile.birthDate} 
+            currentAnchorDate={isValidDate(viewAnchorDate) ? viewAnchorDate : new Date()} 
+          />
         </div>
 
         <div className="flex bg-white rounded-full p-1 mb-6 shadow-sm border border-slate-100 sticky top-0 z-30 overflow-x-auto no-scrollbar">
@@ -380,11 +418,6 @@ const App: React.FC = () => {
                         </div>
                         <div className="w-px h-2 bg-slate-200"></div>
                         <div className="flex items-center space-x-1">
-                          <i className="fas fa-moon text-[8px] text-indigo-400"></i>
-                          <span className="text-[9px] font-bold text-slate-500">{summary.sleep}</span>
-                        </div>
-                        <div className="w-px h-2 bg-slate-200"></div>
-                        <div className="flex items-center space-x-1">
                           <i className="fas fa-poop text-[8px] text-teal-400"></i>
                           <span className="text-[9px] font-bold text-slate-500">{summary.diaper}</span>
                         </div>
@@ -404,7 +437,11 @@ const App: React.FC = () => {
                         return (
                           <div key={log.id} className="relative">
                             <div className="absolute left-[-31px] top-6 w-2.5 h-2.5 rounded-full bg-white border-2 border-indigo-400 ring-4 ring-slate-50 z-10"></div>
-                            <LogCard log={log} onDelete={() => handleDeleteLog(log.id)} />
+                            <LogCard 
+                              log={log} 
+                              onDelete={() => handleDeleteLog(log.id)} 
+                              onEdit={() => setEditingLog(log)}
+                            />
                             {timeGapHours >= 4 && (
                               <div className="flex items-center space-x-2 my-2 -ml-2 opacity-30 select-none">
                                 <div className="h-px w-4 bg-indigo-200"></div>

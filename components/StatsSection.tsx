@@ -49,12 +49,12 @@ const CustomTooltip = ({ active, payload, label, unitMap = {} }: any) => {
 
 export const StatsSection: React.FC<StatsSectionProps> = ({ logs, viewUnit, startTs, endTs }) => {
   const chartData = useMemo(() => {
-    const dataMap = new Map<string, { label: string, bottleMl: number, breastMin: number, sleepHr: number, wet: number, dirty: number }>();
+    const dataMap = new Map<string, { label: string, bottleMl: number, breastMin: number, wet: number, dirty: number }>();
     
     if (viewUnit === 'day') {
       for (let i = 0; i < 24; i++) {
         const key = `${i}:00`;
-        dataMap.set(key, { label: key, bottleMl: 0, breastMin: 0, sleepHr: 0, wet: 0, dirty: 0 });
+        dataMap.set(key, { label: key, bottleMl: 0, breastMin: 0, wet: 0, dirty: 0 });
       }
     } else {
       const diffDays = Math.max(1, Math.ceil((endTs - startTs) / (1000 * 60 * 60 * 24)));
@@ -62,7 +62,7 @@ export const StatsSection: React.FC<StatsSectionProps> = ({ logs, viewUnit, star
         const d = new Date(startTs);
         d.setDate(d.getDate() + i);
         const key = d.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' });
-        dataMap.set(key, { label: key, bottleMl: 0, breastMin: 0, sleepHr: 0, wet: 0, dirty: 0 });
+        dataMap.set(key, { label: key, bottleMl: 0, breastMin: 0, wet: 0, dirty: 0 });
       }
     }
 
@@ -81,8 +81,6 @@ export const StatsSection: React.FC<StatsSectionProps> = ({ logs, viewUnit, star
         } else {
           entry.bottleMl += (log.amount || 0);
         }
-      } else if (log.type === LogType.SLEEP) {
-        entry.sleepHr += parseFloat((log.duration / 60).toFixed(1));
       } else if (log.type === LogType.DIAPER) {
         if (log.status === DiaperStatus.WET || log.status === DiaperStatus.BOTH) entry.wet += 1;
         if (log.status === DiaperStatus.DIRTY || log.status === DiaperStatus.BOTH) entry.dirty += 1;
@@ -115,17 +113,12 @@ export const StatsSection: React.FC<StatsSectionProps> = ({ logs, viewUnit, star
         return acc;
     }, 0);
 
-    const totalSleepMinutes = logs.filter(l => l.type === LogType.SLEEP).reduce((acc, l) => {
-        if (l.type === LogType.SLEEP) return acc + l.duration;
-        return acc;
-    }, 0);
-
     const counts = {
       breast: feedingLogs.filter(l => l.method === FeedingMethod.BREAST).length,
       bottle: feedingLogs.filter(l => l.method === FeedingMethod.FORMULA || l.method === FeedingMethod.BOTTLE).length,
     };
 
-    return { feedingLogs, diaperLogs, diaperStats, totalFormulaAmount, totalBreastDuration, totalSleepMinutes, counts };
+    return { feedingLogs, diaperLogs, diaperStats, totalFormulaAmount, totalBreastDuration, counts };
   }, [logs]);
 
   const renderFeedingMethod = (method: FeedingMethod) => {
@@ -168,7 +161,7 @@ export const StatsSection: React.FC<StatsSectionProps> = ({ logs, viewUnit, star
 
   return (
     <div className="space-y-6 animate-fade-in pb-24">
-      {/* 核心概览卡片 - 2x2 布局 */}
+      {/* 核心概览卡片 - 精简为 2x2 或 1x3 布局 */}
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-white rounded-3xl p-4 shadow-sm border border-slate-100 flex flex-col items-center text-center">
           <div className="w-9 h-9 bg-rose-50 rounded-2xl flex items-center justify-center text-rose-500 mb-3 shadow-inner">
@@ -195,31 +188,29 @@ export const StatsSection: React.FC<StatsSectionProps> = ({ logs, viewUnit, star
         </div>
 
         <div className="bg-white rounded-3xl p-4 shadow-sm border border-slate-100 flex flex-col items-center text-center">
-          <div className="w-9 h-9 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-400 mb-3 shadow-inner">
-              <i className="fas fa-moon text-sm"></i>
-          </div>
-          <p className="text-[9px] font-black text-slate-400 uppercase mb-1 tracking-tighter">睡眠总计</p>
-          <div className="flex items-baseline justify-center">
-              <span className="text-xl font-black text-slate-800">{(details.totalSleepMinutes / 60).toFixed(1)}</span>
-              <span className="text-[9px] text-slate-400 font-bold ml-0.5">h</span>
-          </div>
-          <p className="text-[9px] text-slate-300 mt-1 font-bold">{Math.round(details.totalSleepMinutes/60)} 小时</p>
-        </div>
-
-        <div className="bg-white rounded-3xl p-4 shadow-sm border border-slate-100 flex flex-col items-center text-center">
           <div className="w-9 h-9 bg-teal-50 rounded-2xl flex items-center justify-center text-teal-400 mb-3 shadow-inner">
               <i className="fas fa-poop text-sm"></i>
           </div>
-          <p className="text-[9px] font-black text-slate-400 uppercase mb-1 tracking-tighter">排泄足迹</p>
+          <p className="text-[9px] font-black text-slate-400 uppercase mb-1 tracking-tighter">尿尿记录</p>
           <div className="flex items-baseline justify-center">
-              <span className="text-xl font-black text-slate-800">{details.diaperStats.wet + details.diaperStats.dirty}</span>
+              <span className="text-xl font-black text-slate-800">{details.diaperStats.wet}</span>
               <span className="text-[9px] text-slate-400 font-bold ml-0.5">次</span>
           </div>
-          <p className="text-[9px] text-slate-300 mt-1 font-bold">尿{details.diaperStats.wet} 便{details.diaperStats.dirty}</p>
+        </div>
+
+        <div className="bg-white rounded-3xl p-4 shadow-sm border border-slate-100 flex flex-col items-center text-center">
+          <div className="w-9 h-9 bg-amber-50 rounded-2xl flex items-center justify-center text-amber-500 mb-3 shadow-inner">
+              <i className="fas fa-poo text-sm"></i>
+          </div>
+          <p className="text-[9px] font-black text-slate-400 uppercase mb-1 tracking-tighter">便便记录</p>
+          <div className="flex items-baseline justify-center">
+              <span className="text-xl font-black text-slate-800">{details.diaperStats.dirty}</span>
+              <span className="text-[9px] text-slate-400 font-bold ml-0.5">次</span>
+          </div>
         </div>
       </div>
 
-      {/* 喂养趋势图 - 区分母乳时长与奶粉量 */}
+      {/* 喂养趋势图 */}
       <div className="bg-white rounded-[2.5rem] p-6 shadow-sm border border-slate-100 overflow-hidden">
         <div className="flex justify-between items-center mb-6 px-1">
           <h3 className="text-sm font-black text-slate-800 flex items-center tracking-tight">
@@ -242,31 +233,6 @@ export const StatsSection: React.FC<StatsSectionProps> = ({ logs, viewUnit, star
               <Legend verticalAlign="top" height={36} iconType="circle" wrapperStyle={{fontSize: '10px', fontWeight: 'bold'}} />
               <Area name="瓶喂 (ml)" type="monotone" dataKey="bottleMl" stroke="#fb923c" strokeWidth={3} fillOpacity={1} fill="url(#colorBottle)" animationDuration={1000} />
               <Area name="母乳 (min)" type="monotone" dataKey="breastMin" stroke="#f43f5e" strokeWidth={3} fillOpacity={1} fill="url(#colorBreast)" animationDuration={1200} />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      {/* 睡眠趋势图 */}
-      <div className="bg-white rounded-[2.5rem] p-6 shadow-sm border border-slate-100 overflow-hidden">
-        <div className="flex justify-between items-center mb-6 px-1">
-          <h3 className="text-sm font-black text-slate-800 flex items-center tracking-tight">
-            <i className="fas fa-moon text-indigo-400 mr-2.5"></i>
-            睡眠规律分布
-          </h3>
-          <span className="text-[9px] font-black text-indigo-500 bg-indigo-50 px-2.5 py-1 rounded-full border border-indigo-100 uppercase tracking-widest">Sleeping</span>
-        </div>
-        <div className="h-48 w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={chartData} margin={chartTheme.margin}>
-              <defs>
-                <linearGradient id="colorSleep" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#818cf8" stopOpacity={0.15}/><stop offset="95%" stopColor="#818cf8" stopOpacity={0}/></linearGradient>
-              </defs>
-              <CartesianGrid {...chartTheme.grid} />
-              <XAxis dataKey="label" {...chartTheme.xAxis} />
-              <YAxis {...chartTheme.yAxis} />
-              <Tooltip content={<CustomTooltip unitMap={{sleepHr: 'h'}} />} />
-              <Area name="睡眠时长 (h)" type="monotone" dataKey="sleepHr" stroke="#818cf8" strokeWidth={3} fillOpacity={1} fill="url(#colorSleep)" animationDuration={1000} />
             </AreaChart>
           </ResponsiveContainer>
         </div>
