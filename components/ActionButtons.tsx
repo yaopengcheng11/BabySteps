@@ -158,6 +158,12 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
     setActiveQuickOffset(-1);
   };
 
+  // 微调时间而不切换模式
+  const nudgeTime = (minutes: number) => {
+    setSelectedTime(prev => new Date(prev.getTime() + minutes * 60000));
+    setActiveQuickOffset(-1);
+  };
+
   const resetForms = () => {
     setActiveForm(null);
     setActiveQuickOffset(0);
@@ -271,10 +277,28 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
         <div className="flex justify-between items-center mb-4">
           <div className="flex items-center space-x-2">
             <span className="text-[13px] font-black text-slate-800">记录时间</span>
-            <div className="flex items-center bg-white px-3 py-1 rounded-full shadow-sm border border-slate-100">
-              <span className="text-indigo-600 font-black text-xs">{formattedDate} {formattedWeekday}</span>
-              <span className="mx-1 text-slate-300">|</span>
-              <span className="text-indigo-600 font-black text-xs">{formattedTime}</span>
+            <div className="flex items-center space-x-1">
+              {!showCustomTime && !editingLog && (
+                <button 
+                  onClick={() => nudgeTime(-1)} 
+                  className="w-7 h-7 rounded-lg bg-white border border-slate-100 flex items-center justify-center text-slate-400 active:scale-90 transition-all shadow-sm"
+                >
+                  <i className="fas fa-minus text-[8px]"></i>
+                </button>
+              )}
+              <div className="flex items-center bg-white px-3 py-1 rounded-full shadow-sm border border-slate-100">
+                <span className="text-indigo-600 font-black text-xs">{formattedDate} {formattedWeekday}</span>
+                <span className="mx-1 text-slate-300">|</span>
+                <span className="text-indigo-600 font-black text-xs">{formattedTime}</span>
+              </div>
+              {!showCustomTime && !editingLog && (
+                <button 
+                  onClick={() => nudgeTime(1)} 
+                  className="w-7 h-7 rounded-lg bg-white border border-slate-100 flex items-center justify-center text-slate-400 active:scale-90 transition-all shadow-sm"
+                >
+                  <i className="fas fa-plus text-[8px]"></i>
+                </button>
+              )}
             </div>
           </div>
           {!editingLog && (
@@ -341,7 +365,21 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
       <div className="pt-2">
         <div className="flex justify-between items-center mb-1">
           <span className="text-[8px] font-black text-slate-300 uppercase">时长调整</span>
-          <span className="text-[10px] font-black text-orange-400">{manualVal} min</span>
+          <div className="flex items-center space-x-1">
+            <button 
+              onClick={() => { const v = Math.max(0, manualVal - 1); setManualVal(v); setSeconds(v * 60); }}
+              className="w-6 h-6 rounded-md bg-orange-50 text-orange-400 flex items-center justify-center active:scale-90 transition-all"
+            >
+              <i className="fas fa-minus text-[8px]"></i>
+            </button>
+            <span className="text-[10px] font-black text-orange-400 min-w-[36px] text-center">{manualVal} min</span>
+            <button 
+              onClick={() => { const v = Math.min(60, manualVal + 1); setManualVal(v); setSeconds(v * 60); }}
+              className="w-6 h-6 rounded-md bg-orange-50 text-orange-400 flex items-center justify-center active:scale-90 transition-all"
+            >
+              <i className="fas fa-plus text-[8px]"></i>
+            </button>
+          </div>
         </div>
         <input type="range" min="0" max="60" step="1" value={manualVal} onChange={(e) => { const v = parseInt(e.target.value); setManualVal(v); setSeconds(v * 60); }} className="w-full h-1 bg-slate-100 rounded-lg appearance-none accent-orange-400 cursor-pointer" />
       </div>
@@ -349,11 +387,11 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
   );
 
   const ActionBtn = ({ type, icon, label, color }: { type: LogType, icon: string, label: string, color: string }) => (
-    <button onClick={() => setActiveForm(type)} className="flex flex-col items-center justify-center p-2 rounded-2xl hover:bg-slate-50 transition-colors">
-      <div className={`w-12 h-12 rounded-2xl ${color} flex items-center justify-center text-white mb-2 shadow-lg shadow-slate-100 transform active:scale-90 transition-all`}>
-        <i className={`fas ${icon} text-lg`}></i>
+    <button onClick={() => setActiveForm(type)} className="flex flex-col items-center justify-center p-1 rounded-xl hover:bg-slate-50 transition-colors">
+      <div className={`w-9 h-9 rounded-xl ${color} flex items-center justify-center text-white mb-1.5 shadow-md shadow-slate-100 transform active:scale-90 transition-all`}>
+        <i className={`fas ${icon} text-sm`}></i>
       </div>
-      <span className="text-[11px] font-bold text-slate-500 whitespace-nowrap">{label}</span>
+      <span className="text-[9px] font-black text-slate-500 whitespace-nowrap">{label}</span>
     </button>
   );
 
@@ -371,12 +409,12 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
 
   return (
     <div className="relative">
-      <div className="grid grid-cols-3 gap-y-4 gap-x-2">
+      <div className="grid grid-cols-6 gap-x-1">
         <ActionBtn type={LogType.FEEDING} icon="fa-bottle-water" label="喂养" color="bg-orange-400" />
         <ActionBtn type={LogType.DIAPER} icon="fa-poop" label="尿布" color="bg-teal-400" />
         <ActionBtn type={LogType.VACCINE} icon="fa-syringe" label="疫苗" color="bg-emerald-500" />
         <ActionBtn type={LogType.GROWTH} icon="fa-star" label="成长" color="bg-rose-400" />
-        <ActionBtn type={LogType.SUPPLEMENT} icon="fa-capsules" label="营养补充剂" color="bg-indigo-400" />
+        <ActionBtn type={LogType.SUPPLEMENT} icon="fa-capsules" label="补充剂" color="bg-indigo-400" />
         <ActionBtn type={LogType.NOTE} icon="fa-note-sticky" label="便签" color="bg-amber-400" />
       </div>
 

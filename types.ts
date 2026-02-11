@@ -30,19 +30,26 @@ export enum GrowthCategory {
   SKILL = '新技能'
 }
 
+export interface User {
+  id: string;
+  email: string;
+  username: string;
+}
+
 export interface BabyLogBase {
   id: string;
   type: LogType;
   timestamp: number;
   note?: string;
+  userId?: string; // 预留多用户数据隔离
 }
 
 export interface FeedingLog extends BabyLogBase {
   type: LogType.FEEDING;
   amount?: number;
-  duration?: number; // 总时长
-  leftDuration?: number; // 左侧时长
-  rightDuration?: number; // 右侧时长
+  duration?: number;
+  leftDuration?: number;
+  rightDuration?: number;
   method: FeedingMethod;
   side?: '左' | '右' | '双侧';
 }
@@ -90,6 +97,7 @@ export interface BabyProfile {
   name: string;
   birthDate: string;
   gender: 'boy' | 'girl';
+  userId?: string;
 }
 
 export interface BabyTodo {

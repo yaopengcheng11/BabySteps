@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { LogType, BabyLog, FeedingMethod, DiaperStatus, BabyProfile, AdviceLog } from './types';
+import { LogType, BabyLog, FeedingMethod, DiaperStatus, BabyProfile, AdviceLog, User } from './types';
 import { Header } from './components/Header';
 import { LogCard } from './components/LogCard';
 import { ActionButtons } from './components/ActionButtons';
@@ -9,14 +9,17 @@ import { AIAdviceSection } from './components/AIAdviceSection';
 import { ProfileSetup } from './components/ProfileSetup';
 import { NoteBoard } from './components/NoteBoard';
 import { StatusDashboard } from './components/StatusDashboard';
+import { AuthScreen } from './components/AuthScreen';
 
 const STORAGE_KEY_LOGS = 'babysteps_logs_v1';
 const STORAGE_KEY_PROFILE = 'babysteps_profile_v1';
+const STORAGE_KEY_USER = 'babysteps_user_v1';
 
 export type ViewUnit = 'day' | 'week' | 'month' | 'custom';
 export type AppTab = 'timeline' | 'notes' | 'stats' | 'ai';
 
 const App: React.FC = () => {
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [logs, setLogs] = useState<BabyLog[]>([]);
   const [profile, setProfile] = useState<BabyProfile | null>(null);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
@@ -25,10 +28,10 @@ const App: React.FC = () => {
   const [selectedFilters, setSelectedFilters] = useState<Set<LogType>>(new Set(Object.values(LogType)));
   const [viewUnit, setViewUnit] = useState<ViewUnit>('day');
   const [viewAnchorDate, setViewAnchorDate] = useState<Date>(new Date());
-
+  
   const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set());
   const [editingLog, setEditingLog] = useState<BabyLog | null>(null);
-
+  
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showInstallBanner, setShowInstallBanner] = useState(false);
 
@@ -50,8 +53,15 @@ const App: React.FC = () => {
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
 
+    const savedUser = localStorage.getItem(STORAGE_KEY_USER);
     const savedLogs = localStorage.getItem(STORAGE_KEY_LOGS);
     const savedProfile = localStorage.getItem(STORAGE_KEY_PROFILE);
+    
+    if (savedUser) {
+      try {
+        setCurrentUser(JSON.parse(savedUser));
+      } catch (e) {}
+    }
 
     if (savedLogs) {
       try {
@@ -67,7 +77,7 @@ const App: React.FC = () => {
         console.error("Failed to parse profile", e);
       }
     }
-
+    
     setIsInitialized(true);
 
     return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
@@ -77,11 +87,24 @@ const App: React.FC = () => {
     if (isInitialized) {
       localStorage.setItem(STORAGE_KEY_LOGS, JSON.stringify(logs));
       localStorage.setItem(STORAGE_KEY_PROFILE, JSON.stringify(profile));
+      if (currentUser) {
+        localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(currentUser));
+      } else {
+        localStorage.removeItem(STORAGE_KEY_USER);
+      }
     }
-  }, [logs, profile, isInitialized]);
+  }, [logs, profile, currentUser, isInitialized]);
+
+  const handleLogin = (user: User) => {
+    setCurrentUser(user);
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+  };
 
   const handleAddLog = (log: BabyLog) => {
-    setLogs(prev => [log, ...prev].sort((a, b) => b.timestamp - a.timestamp));
+    setLogs(prev => [{...log, userId: currentUser?.id}, ...prev].sort((a, b) => b.timestamp - a.timestamp));
     const d = new Date(log.timestamp);
     if (isValidDate(d)) {
       const dateStr = d.toLocaleDateString('zh-CN', {
@@ -101,9 +124,8 @@ const App: React.FC = () => {
   };
 
   const handleSaveProfile = (newProfile: BabyProfile) => {
-    setProfile(newProfile);
+    setProfile({...newProfile, userId: currentUser?.id});
     setIsEditingProfile(false);
-    localStorage.setItem(STORAGE_KEY_PROFILE, JSON.stringify(newProfile));
   };
 
   const handleImportData = (importedLogs: BabyLog[], importedProfile: BabyProfile) => {
@@ -140,7 +162,7 @@ const App: React.FC = () => {
   const currentRange = useMemo(() => {
     let startTs = 0;
     let endTs = Infinity;
-
+    
     const validAnchor = isValidDate(viewAnchorDate) ? viewAnchorDate : new Date();
     const startOfAnchor = new Date(validAnchor);
     startOfAnchor.setHours(0, 0, 0, 0);
@@ -166,12 +188,30 @@ const App: React.FC = () => {
     } else if (viewUnit === 'custom') {
       const customStart = customRange.start ? new Date(customRange.start) : null;
       const customEnd = customRange.end ? new Date(customRange.end) : null;
-
+      
       startTs = (customStart && isValidDate(customStart)) ? customStart.setHours(0, 0, 0, 0) : 0;
       endTs = (customEnd && isValidDate(customEnd)) ? customEnd.setHours(23, 59, 59, 999) : Infinity;
     }
     return { startTs, endTs };
   }, [viewUnit, viewAnchorDate, customRange]);
+
+  // 新增：计算用于 AI 报告的基准锚点日期（确保月龄准确）
+  const reportAnchorDate = useMemo(() => {
+    if (viewUnit === 'custom' && customRange.end) {
+      return new Date(customRange.end);
+    }
+    if (viewUnit === 'week') {
+      // 周视图使用该周的最后一天作为锚点
+      const d = new Date(currentRange.endTs - 1000);
+      return d;
+    }
+    if (viewUnit === 'month') {
+      // 月视图使用该月的最后一天作为锚点
+      const d = new Date(currentRange.endTs - 1000);
+      return d;
+    }
+    return viewAnchorDate;
+  }, [viewUnit, viewAnchorDate, customRange.end, currentRange.endTs]);
 
   const filteredLogs = useMemo(() => {
     return logs
@@ -197,7 +237,7 @@ const App: React.FC = () => {
       if (!groups[dateStr]) groups[dateStr] = [];
       groups[dateStr].push(log);
     });
-
+    
     const result = Object.entries(groups).sort((a, b) => b[1][0].timestamp - a[1][0].timestamp);
     if (expandedDates.size === 0 && result.length > 0) {
       setExpandedDates(new Set([result[0][0], result[1]?.[0]].filter(Boolean)));
@@ -218,7 +258,7 @@ const App: React.FC = () => {
     let feedingAmount = 0;
     let feedingCount = 0;
     let diaperCount = 0;
-
+    
     dayLogs.forEach(log => {
       if (log.type === LogType.FEEDING) {
         feedingCount++;
@@ -227,7 +267,7 @@ const App: React.FC = () => {
         diaperCount++;
       }
     });
-
+    
     return {
       feeding: feedingAmount > 0 ? `${feedingAmount}ml` : `${feedingCount}次`,
       diaper: `${diaperCount}次`
@@ -281,8 +321,9 @@ const App: React.FC = () => {
             <button
               key={item.type}
               onClick={() => toggleFilter(item.type)}
-              className={`flex-shrink-0 flex items-center space-x-1.5 px-3 py-1.5 rounded-full border transition-all duration-300 ${isActive ? `${item.color} border-transparent text-white shadow-md` : 'bg-white border-slate-100 text-slate-400'
-                }`}
+              className={`flex-shrink-0 flex items-center space-x-1.5 px-3 py-1.5 rounded-full border transition-all duration-300 ${
+                isActive ? `${item.color} border-transparent text-white shadow-md` : 'bg-white border-slate-100 text-slate-400'
+              }`}
             >
               <i className={`fas ${item.icon} text-[10px]`}></i>
               <span className="text-[10px] font-bold whitespace-nowrap">{item.label}</span>
@@ -294,20 +335,27 @@ const App: React.FC = () => {
   };
 
   if (!isInitialized) return null;
-  if (!profile || isEditingProfile) return (
-    <ProfileSetup
-      initialData={profile || undefined}
-      onSave={handleSaveProfile}
-      onImport={handleImportData}
-      onCancel={profile ? () => setIsEditingProfile(false) : undefined}
-    />
-  );
+  if (!currentUser) {
+    return <AuthScreen onLogin={handleLogin} />;
+  }
+
+  if (!profile || isEditingProfile) {
+    return (
+      <ProfileSetup 
+        initialData={profile || undefined}
+        onSave={handleSaveProfile} 
+        onImport={handleImportData} 
+        onCancel={profile ? () => setIsEditingProfile(false) : undefined}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col overflow-hidden">
-      <Header
-        profile={profile}
-        onEditProfile={() => setIsEditingProfile(true)}
+      <Header 
+        profile={profile} 
+        onEditProfile={() => setIsEditingProfile(true)} 
+        onLogout={handleLogout}
         logs={logs}
         onImportData={handleImportData}
         isInstallable={!!deferredPrompt}
@@ -337,20 +385,20 @@ const App: React.FC = () => {
 
         <StatusDashboard logs={logs} />
 
-        <div className="mb-6 bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
-          <ActionButtons
-            onAddLog={handleAddLog}
+        <div className="mb-4 bg-white rounded-3xl p-3 shadow-sm border border-slate-100">
+           <ActionButtons 
+            onAddLog={handleAddLog} 
             onUpdateLog={handleUpdateLog}
             editingLog={editingLog}
             onCloseEdit={() => setEditingLog(null)}
-            birthDate={profile.birthDate}
-            currentAnchorDate={isValidDate(viewAnchorDate) ? viewAnchorDate : new Date()}
+            birthDate={profile.birthDate} 
+            currentAnchorDate={isValidDate(viewAnchorDate) ? viewAnchorDate : new Date()} 
           />
         </div>
 
         <div className="flex bg-white rounded-full p-1 mb-6 shadow-sm border border-slate-100 sticky top-0 z-30 overflow-x-auto no-scrollbar">
           {(['timeline', 'notes', 'stats', 'ai'] as const).map((tab) => (
-            <button
+            <button 
               key={tab}
               onClick={() => setActiveTab(tab)}
               className={`flex-1 min-w-[60px] py-2.5 rounded-full text-[11px] font-bold transition-all whitespace-nowrap ${activeTab === tab ? 'bg-indigo-500 text-white shadow-md' : 'text-slate-500'}`}
@@ -380,8 +428,8 @@ const App: React.FC = () => {
             </div>
           ) : (
             <div className="flex items-center space-x-2">
-              <input type="date" value={customRange.start} onChange={(e) => setCustomRange({ ...customRange, start: e.target.value })} className="flex-1 bg-slate-50 border-none text-[10px] p-2 rounded-lg outline-none ring-1 ring-slate-200" />
-              <input type="date" value={customRange.end} onChange={(e) => setCustomRange({ ...customRange, end: e.target.value })} className="flex-1 bg-slate-50 border-none text-[10px] p-2 rounded-lg outline-none ring-1 ring-slate-200" />
+              <input type="date" value={customRange.start} onChange={(e) => setCustomRange({...customRange, start: e.target.value})} className="flex-1 bg-slate-50 border-none text-[10px] p-2 rounded-lg outline-none ring-1 ring-slate-200" />
+              <input type="date" value={customRange.end} onChange={(e) => setCustomRange({...customRange, end: e.target.value})} className="flex-1 bg-slate-50 border-none text-[10px] p-2 rounded-lg outline-none ring-1 ring-slate-200" />
             </div>
           )}
 
@@ -397,10 +445,10 @@ const App: React.FC = () => {
             {groupedLogs.map(([date, dayLogs], groupIdx) => {
               const summary = getDaySummary(dayLogs);
               const isExpanded = expandedDates.has(date);
-
+              
               return (
                 <section key={date} className="relative">
-                  <div
+                  <div 
                     onClick={() => toggleDateExpanded(date)}
                     className="sticky top-0 z-20 bg-slate-50/95 backdrop-blur-sm py-2 px-1 flex items-center justify-between cursor-pointer group transition-all"
                   >
@@ -408,7 +456,7 @@ const App: React.FC = () => {
                       <div className="w-2 h-2 rounded-full bg-indigo-400 shadow-[0_0_8px_rgba(129,140,248,0.5)]"></div>
                       <h3 className="text-xs font-black text-slate-800 tracking-tight">{date}</h3>
                     </div>
-
+                    
                     <div className="flex items-center space-x-2">
                       <div className="flex items-center space-x-1.5 bg-white/60 border border-slate-100 px-2 py-1 rounded-full shadow-sm scale-90 origin-right transition-all group-hover:bg-white">
                         <div className="flex items-center space-x-1">
@@ -428,17 +476,17 @@ const App: React.FC = () => {
                   {isExpanded && (
                     <div className="ml-1 pl-6 border-l-2 border-indigo-100/50 space-y-4 py-4 animate-fade-in relative">
                       <div className="absolute left-[-2px] top-0 bottom-0 w-[2px] bg-gradient-to-b from-indigo-100/0 via-indigo-100 to-indigo-100/0"></div>
-
+                      
                       {dayLogs.map((log, logIdx) => {
                         const prevLog = dayLogs[logIdx + 1];
                         const timeGapHours = prevLog ? (log.timestamp - prevLog.timestamp) / (1000 * 60 * 60) : 0;
-
+                        
                         return (
                           <div key={log.id} className="relative">
                             <div className="absolute left-[-31px] top-6 w-2.5 h-2.5 rounded-full bg-white border-2 border-indigo-400 ring-4 ring-slate-50 z-10"></div>
-                            <LogCard
-                              log={log}
-                              onDelete={() => handleDeleteLog(log.id)}
+                            <LogCard 
+                              log={log} 
+                              onDelete={() => handleDeleteLog(log.id)} 
                               onEdit={() => setEditingLog(log)}
                             />
                             {timeGapHours >= 4 && (
@@ -456,7 +504,7 @@ const App: React.FC = () => {
                 </section>
               );
             })}
-
+            
             {groupedLogs.length === 0 && (
               <div className="py-24 text-center">
                 <div className="w-16 h-16 bg-white rounded-3xl flex items-center justify-center mx-auto mb-4 text-slate-200 shadow-sm border border-slate-100">
@@ -477,15 +525,15 @@ const App: React.FC = () => {
         )}
 
         {activeTab === 'ai' && (
-          <AIAdviceSection
-            profile={profile}
-            logs={logs}
-            viewUnit={viewUnit}
-            rangeLabel={getRangeLabel()}
-            viewAnchorDate={viewAnchorDate}
-            filteredLogs={filteredLogs}
-            onSaveAdvice={handleAddLog}
-            onDeleteAdvice={handleDeleteLog}
+          <AIAdviceSection 
+            profile={profile} 
+            logs={logs} 
+            viewUnit={viewUnit} 
+            rangeLabel={getRangeLabel()} 
+            viewAnchorDate={reportAnchorDate} // 使用专门为 AI 报告优化的锚点
+            filteredLogs={filteredLogs} 
+            onSaveAdvice={handleAddLog} 
+            onDeleteAdvice={handleDeleteLog} 
           />
         )}
       </main>
