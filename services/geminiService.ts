@@ -25,9 +25,9 @@ export const getAIReport = async (
   }
 
   // 1. 计算宝宝月龄（基于 anchorDate 而非当前时间）
-  // 确保计算的是报告日期当时的月龄，以提供准确的历史建议
   const birth = new Date(profile.birthDate);
   const reportTime = new Date(anchorDate);
+
   const diffTime = reportTime.getTime() - birth.getTime();
   const ageInDays = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
   const ageInMonths = Math.floor(ageInDays / 30);
@@ -35,7 +35,6 @@ export const getAIReport = async (
   const ageContext = `${ageInMonths}个月${ageRemainderDays}天 (出生第${ageInDays}天)`;
 
   // 2. 格式化记录汇总
-  // 注意：已根据要求移除睡眠(SLEEP)记录，新增补剂(SUPPLEMENT)记录
   const logSummary = logs.map(log => {
     const date = new Date(log.timestamp).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' });
     const time = new Date(log.timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
@@ -54,41 +53,40 @@ export const getAIReport = async (
     day: '每日成长看板',
     week: '周度发育简报',
     month: '月度成长总结',
-    custom: '阶段深度分析'
+    custom: '跨度阶段深度分析'
   }[reportType];
 
-  // 3. 构建 Prompt
+  // 3. 构建 Prompt (严格对应提供的最新版逻辑)
   const userPrompt = `
 # 育儿咨询背景
 宝宝姓名：${profile.name}
 性别：${profile.gender === 'boy' ? '男宝宝' : '女宝宝'}
-报告日期：${rangeLabel}
-宝宝在该日期的月龄：${ageContext}
+分析区间：${rangeLabel}
+宝宝在区间截止时的月龄：${ageContext}
 报告类型：${typeName}
 
-# 该时段记录数据汇总
+# 数据记录
 ${logSummary || "（该周期内暂无详细记录，请根据月龄提供一般性指导）"}
 
-# 任务指令
-请扮演一位拥有 20 年经验的“资深儿科专家”，基于以上数据撰写一份科学且贴心的分析报告。
+# 专家任务指令
+你是一位拥有 20 年经验的“资深儿科专家”。请基于上述特定时间段（${rangeLabel}）的数据撰写分析报告。
 
-**特别注意：**
-- **计算基准**：请务必基于上面提供的“报告日期”和“宝宝在该日期的月龄”进行分析。即使当前真实世界的时间更晚，你的所有建议和分析也必须符合宝宝在那一刻的发育状态。
-- **严禁提及睡眠**：用户未记录睡眠信息，严禁包含任何关于睡眠的建议、分析或指导。
+**特别红线：**
+1. **时空同步**：报告中提到的所有发育分析、护理建议，必须严格基于“区间截止时的月龄（${ageContext}）”。严禁以现实中的今天作为基准，严禁预测未来的发育。
+2. **区间思维**：如果报告类型是“周/月/跨度分析”，请分析这段时间内数据的“趋势”或“变化”，而不仅仅是单日状态。
+3. **严禁提及睡眠**：绝对不要出现“睡眠”一词。
 
-**具体撰写要求：**
-1. **喂养与肠胃分析**：根据喂养量、频率及排泄状态，分析宝宝当时的吸收和消化情况。
-2. **发育指导**：结合宝宝在报告日期所处的 ${ageInMonths} 个月发育阶段，给出当时的运动、认知等发育建议。
-3. **结构化内容**：
-   - 📊 **【深度发育分析】**：分析记录数据背后的健康状态。
-   - 🌟 **【当月龄核心技能】**：此时期宝宝应关注的发育目标。
-   - 🛠 **【专家护理策略】**：给出 3 条符合当时月龄的实操建议。
-   - 💖 **【致家长的话】**：温暖的鼓励。
-4. **格式**：约 400 字，Markdown 格式。语气专业且温暖。
+**报告结构：**
+- 📊 **【核心阶段分析】**：分析记录区间内宝宝的成长趋势（如奶量变化、排泄规律）。
+- 🌟 **【月龄发育里程碑】**：指出宝宝在 ${ageInMonths} 个月大时应具备的核心能力。
+- 🛠 **【针对性专家策略】**：给出 3 条符合当前月龄的科学实操建议。
+- 💖 **【温暖鼓励】**：简短有力的家长寄语。
+
+**要求：** 约 400 字，Markdown 格式。
 `;
 
   // 4. 系统指令
-  const systemInstruction = "你是一位精通儿科学、儿童心理学和婴幼儿营养学的顶级专家。你的回答必须严格基于 WHO 规范和最新科学共识。绝对不要提到“睡眠”一词。必须严格遵守报告日期的月龄设定，不要提及未来的发育情况。";
+  const systemInstruction = "你是一位顶级儿科医学专家。你的分析必须严格符合用户提供的时间语境。即使现在是2月，如果用户要求分析1月的报告，你也必须以1月宝宝的月龄为唯一参考。严禁提及睡眠建议。";
 
   try {
     // 使用 fetch 直接调用 DeepSeek API
@@ -104,7 +102,7 @@ ${logSummary || "（该周期内暂无详细记录，请根据月龄提供一般
           { role: "system", content: systemInstruction },
           { role: "user", content: userPrompt }
         ],
-        temperature: 1.3, // 保持较高的温度以获得更自然的文本
+        temperature: 1.0, // 适度降低温度以确保严格遵守“红线”指令，同时保留自然语言能力
         max_tokens: 2000,
         stream: false,
       }),
